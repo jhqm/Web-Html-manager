@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { initDatabase, closeDatabase, getAllFiles, getFileByPath, insertFile, updateFile, deleteFile, deleteFileByPath, getAllFolders, insertFolder, getFolderByPath, insertVersion, getVersionsByFileId, deleteVersionsByFileId, getAllTags, insertTag, updateTag, deleteTag, addTagToFile, removeTagFromFile, getTagsByFileId, getFilesByTagId, setSetting, getSetting, getFileById } from './database'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -193,7 +194,183 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   shell.openExternal(url)
 })
 
+// ============ 数据库操作 ============
+
+// 文件相关
+ipcMain.handle('db-get-all-files', async () => {
+  return getAllFiles()
+})
+
+ipcMain.handle('db-get-file-by-id', async (_event, id: number) => {
+  return getFileById(id)
+})
+
+ipcMain.handle('db-insert-file', async (_event, file: { name: string; path: string; title?: string; description?: string; size?: number; created_at?: string; updated_at?: string; folder_id?: number | null }) => {
+  return insertFile(file)
+})
+
+ipcMain.handle('db-update-file', async (_event, id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null }) => {
+  return updateFile(id, file)
+})
+
+ipcMain.handle('db-delete-file', async (_event, id: number) => {
+  return deleteFile(id)
+})
+
+ipcMain.handle('db-delete-file-by-path', async (_event, filePath: string) => {
+  return deleteFileByPath(filePath)
+})
+
+ipcMain.handle('db-get-file-by-path', async (_event, filePath: string) => {
+  return getFileByPath(filePath)
+})
+
+// 文件夹相关
+ipcMain.handle('db-get-all-folders', async () => {
+  return getAllFolders()
+})
+
+ipcMain.handle('db-insert-folder', async (_event, folder: { name: string; parent_id?: number | null; path: string }) => {
+  return insertFolder(folder)
+})
+
+ipcMain.handle('db-get-folder-by-path', async (_event, folderPath: string) => {
+  return getFolderByPath(folderPath)
+})
+
+// 版本相关
+ipcMain.handle('db-insert-version', async (_event, version: { file_id: number; version_path: string; snapshot_at?: string; remark?: string }) => {
+  return insertVersion(version)
+})
+
+ipcMain.handle('db-get-versions-by-file-id', async (_event, fileId: number) => {
+  return getVersionsByFileId(fileId)
+})
+
+ipcMain.handle('db-delete-versions-by-file-id', async (_event, fileId: number) => {
+  return deleteVersionsByFileId(fileId)
+})
+
+// 标签相关
+ipcMain.handle('db-get-all-tags', async () => {
+  return getAllTags()
+})
+
+ipcMain.handle('db-insert-tag', async (_event, tag: { name: string; color?: string }) => {
+  return insertTag(tag)
+})
+
+ipcMain.handle('db-update-tag', async (_event, id: number, tag: { name?: string; color?: string }) => {
+  return updateTag(id, tag)
+})
+
+ipcMain.handle('db-delete-tag', async (_event, id: number) => {
+  return deleteTag(id)
+})
+
+ipcMain.handle('db-add-tag-to-file', async (_event, fileId: number, tagId: number) => {
+  return addTagToFile(fileId, tagId)
+})
+
+ipcMain.handle('db-remove-tag-from-file', async (_event, fileId: number, tagId: number) => {
+  return removeTagFromFile(fileId, tagId)
+})
+
+ipcMain.handle('db-get-tags-by-file-id', async (_event, fileId: number) => {
+  return getTagsByFileId(fileId)
+})
+
+ipcMain.handle('db-get-files-by-tag-id', async (_event, tagId: number) => {
+  return getFilesByTagId(tagId)
+})
+
+// 设置相关
+ipcMain.handle('db-set-setting', async (_event, key: string, value: string) => {
+  setSetting(key, value)
+  return true
+})
+
+ipcMain.handle('db-get-setting', async (_event, key: string) => {
+  return getSetting(key)
+})
+
+// 递归扫描目录下所有HTML文件
+ipcMain.handle('scan-html-files', async (_event, rootPath: string, recursive: boolean = true) => {
+  const htmlFiles: Array<{
+    name: string
+    path: string
+    relativePath: string
+    size: number
+    createdAt: string
+    updatedAt: string
+  }> = []
+  
+  function scanDir(dirPath: string, basePath: string) {
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true })
+      
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item.name)
+        
+        if (item.isFile() && item.name.toLowerCase().endsWith('.html')) {
+          const stats = fs.statSync(fullPath)
+          htmlFiles.push({
+            name: item.name,
+            path: fullPath,
+            relativePath: path.relative(basePath, fullPath),
+            size: stats.size,
+            createdAt: stats.birthtime.toISOString(),
+            updatedAt: stats.mtime.toISOString()
+          })
+        } else if (item.isDirectory() && recursive && item.name !== '.versions' && !item.name.startsWith('.')) {
+          scanDir(fullPath, basePath)
+        }
+      }
+    } catch (error) {
+      console.error('Error scanning directory:', error)
+    }
+  }
+  
+  scanDir(rootPath, rootPath)
+  return htmlFiles
+})
+
+// 复制文件到仓库
+ipcMain.handle('copy-file-to-repo', async (_event, sourcePath: string, destDir: string) => {
+  try {
+    const fileName = path.basename(sourcePath)
+    const destPath = path.join(destDir, fileName)
+    
+    // 如果目标文件已存在，添加时间戳
+    let finalPath = destPath
+    if (fs.existsSync(destPath)) {
+      const ext = path.extname(fileName)
+      const base = path.basename(fileName, ext)
+      const timestamp = Date.now()
+      finalPath = path.join(destDir, `${base}_${timestamp}${ext}`)
+    }
+    
+    fs.copyFileSync(sourcePath, finalPath)
+    return { success: true, path: finalPath }
+  } catch (error) {
+    console.error('Error copying file:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+// 选择HTML文件
+ipcMain.handle('select-html-files', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'HTML Files', extensions: ['html', 'htm'] }]
+  })
+  return result.canceled ? [] : result.filePaths
+})
+
 app.whenReady().then(() => {
+  // 初始化数据库
+  initDatabase()
+  
   createWindow()
 
   app.on('activate', () => {
@@ -205,6 +382,11 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    closeDatabase()
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  closeDatabase()
 })
