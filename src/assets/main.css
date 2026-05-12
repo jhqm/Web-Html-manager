@@ -1,0 +1,282 @@
+:root {
+  --primary-color: #409eff;
+  --sidebar-width: 240px;
+  --header-height: 56px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 侧边栏 */
+.sidebar {
+  width: var(--sidebar-width);
+  background: #f5f7fa;
+  border-right: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 文件列表 */
+.file-list-container {
+  width: 400px;
+  border-right: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-list-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.file-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.file-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+}
+
+.file-item.active {
+  border-color: var(--primary-color);
+  background: #ecf5ff;
+}
+
+.file-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-item-meta {
+  font-size: 12px;
+  color: #909399;
+  display: flex;
+  gap: 12px;
+}
+
+/* 预览面板 */
+.preview-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.preview-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.preview-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  gap: 16px;
+}
+
+/* 版本历史面板 */
+.version-panel {
+  height: 200px;
+  border-top: 1px solid #e4e7ed;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.version-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+}
+
+.version-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.version-item {
+  padding: 8px 12px;
+  background: #fff;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid #e4e7ed;
+  transition: all 0.2s;
+}
+
+.version-item:hover {
+  border-color: var(--primary-color);
+}
+
+/* 工具栏 */
+.tool-bar {
+  height: var(--header-height);
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+}
+
+.tool-bar-logo {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.tool-bar-search {
+  flex: 1;
+  max-width: 400px;
+}
+
+/* 树形文件夹 */
+.folder-tree {
+  font-size: 14px;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.folder-item:hover {
+  background: #e4e7ed;
+}
+
+.folder-item.active {
+  background: #ecf5ff;
+  color: var(--primary-color);
+}
+
+.folder-icon {
+  margin-right: 8px;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+  gap: 16px;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f7fa;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #dcdfe6;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c0c4cc;
+}
