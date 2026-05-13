@@ -125,6 +125,7 @@ declare global {
         created_at: string
         updated_at: string
         folder_id: number | null
+        is_pinned: number
       }>>
       dbGetFileById: (id: number) => Promise<{
         id: number

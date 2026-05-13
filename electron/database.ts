@@ -53,9 +53,17 @@ function createTables(): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       folder_id INTEGER,
+      is_pinned INTEGER DEFAULT 0,
       FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
     )
   `)
+
+  // 迁移：添加 is_pinned 列（如果不存在）
+  try {
+    db.exec(`ALTER TABLE files ADD COLUMN is_pinned INTEGER DEFAULT 0`)
+  } catch (e) {
+    // 列已存在，忽略
+  }
 
   // 文件夹表
   db.exec(`
@@ -141,6 +149,7 @@ export interface FileRecord {
   created_at?: string
   updated_at?: string
   folder_id?: number | null
+  is_pinned?: number
 }
 
 export function insertFile(file: FileRecord): number {
@@ -178,6 +187,7 @@ export function updateFile(id: number, file: Partial<FileRecord>): boolean {
   if (file.size !== undefined) { fields.push('size = ?'); values.push(file.size) }
   if (file.updated_at !== undefined) { fields.push('updated_at = ?'); values.push(file.updated_at) }
   if (file.folder_id !== undefined) { fields.push('folder_id = ?'); values.push(file.folder_id) }
+  if (file.is_pinned !== undefined) { fields.push('is_pinned = ?'); values.push(file.is_pinned) }
   
   if (fields.length === 0) return false
   

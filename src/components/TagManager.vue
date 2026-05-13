@@ -8,12 +8,22 @@
     </div>
     
     <div class="tag-list">
+      <!-- 无标签选项 -->
+      <div
+        class="tag-item"
+        :class="{ active: fileStore.selectedTagIdForFilter === -1 }"
+        @click="selectTag(-1)"
+      >
+        <span class="tag-dot" style="background-color: #909399;"></span>
+        <span class="tag-name">无标签</span>
+      </div>
+      
       <div
         v-for="tag in tagStore.tags"
         :key="tag.id"
         class="tag-item"
-        :class="{ active: tagStore.selectedTagId === tag.id }"
-        @click="toggleTag(tag.id)"
+        :class="{ active: fileStore.selectedTagIdForFilter === tag.id }"
+        @click="selectTag(tag.id)"
       >
         <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
         <span class="tag-name">{{ tag.name }}</span>
@@ -78,12 +88,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Plus, MoreFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useTagStore, type TagRecord } from '../stores/tag'
+import { useFileStore } from '../stores/file'
 
 const tagStore = useTagStore()
+const fileStore = useFileStore()
 
 // 创建标签
 const showCreateDialog = ref(false)
@@ -117,6 +129,10 @@ function handleCommand(command: string, tag: TagRecord) {
   } else if (command === 'delete') {
     tagStore.removeTag(tag.id)
     ElMessage.success('标签已删除')
+    // 如果这个标签正在筛选，清除筛选
+    if (fileStore.selectedTagIdForFilter === tag.id) {
+      fileStore.setTagFilter(null)
+    }
   }
 }
 
@@ -136,11 +152,17 @@ async function updateTag() {
 }
 
 // 切换标签筛选
-function toggleTag(tagId: number) {
-  if (tagStore.selectedTagId === tagId) {
-    tagStore.selectTag(null)
+async function selectTag(tagId: number) {
+  if (fileStore.selectedTagIdForFilter === tagId) {
+    fileStore.setTagFilter(null)
   } else {
-    tagStore.selectTag(tagId)
+    fileStore.setTagFilter(tagId)
+  }
+  
+  // 加载该标签下的文件
+  if (fileStore.selectedTagIdForFilter !== null && fileStore.selectedTagIdForFilter !== -1) {
+    const fileIds = await tagStore.getTagFileIds(fileStore.selectedTagIdForFilter)
+    fileStore.updateTaggedFileIds(fileStore.selectedTagIdForFilter, fileIds)
   }
 }
 </script>

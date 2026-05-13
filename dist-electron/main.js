@@ -59,9 +59,14 @@ function createTables() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       folder_id INTEGER,
+      is_pinned INTEGER DEFAULT 0,
       FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
     )
   `);
+  try {
+    db.exec(`ALTER TABLE files ADD COLUMN is_pinned INTEGER DEFAULT 0`);
+  } catch (e) {
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS folders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,6 +174,10 @@ function updateFile(id, file) {
   if (file.folder_id !== void 0) {
     fields.push("folder_id = ?");
     values.push(file.folder_id);
+  }
+  if (file.is_pinned !== void 0) {
+    fields.push("is_pinned = ?");
+    values.push(file.is_pinned);
   }
   if (fields.length === 0) return false;
   values.push(id);

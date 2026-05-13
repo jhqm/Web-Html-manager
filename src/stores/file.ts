@@ -11,6 +11,7 @@ export interface FileRecord {
   created_at: string
   updated_at: string
   folder_id: number | null
+  is_pinned: number // 0: 未置顶, 1: 置顶
 }
 
 export interface FolderRecord {
@@ -31,6 +32,13 @@ export const useFileStore = defineStore('file', () => {
   const searchKeyword = ref('')
   const sortBy = ref<'updated_at' | 'name' | 'size'>('updated_at')
   const repoPath = ref<string>('')
+  
+  // 置顶文件列表（内存中）
+  const pinnedFiles = ref<number[]>([])
+  
+  // 标签筛选（内存缓存）
+  const selectedTagIdForFilter = ref<number | null>(null)
+  const taggedFileIdsMap = ref<Map<number, number[]>>(new Map())
 
   // 计算属性：过滤和排序后的文件列表
   const filteredFiles = computed(() => {
@@ -40,6 +48,27 @@ export const useFileStore = defineStore('file', () => {
     if (currentFolder.value !== null) {
       result = result.filter(f => f.folder_id === currentFolder.value)
     }
+
+    // 按标签过滤
+    if (selectedTagIdForFilter.value !== null) {
+      if (selectedTagIdForFilter.value === -1) {
+        // 无标签
+        const taggedFileIds = new Set<number>()
+        for (const tagId of taggedFileIdsMap.value.keys()) {
+          const ids = taggedFileIdsMap.value.get(tagId)
+          if (ids) ids.forEach(id => taggedFileIds.add(id))
+        }
+        result = result.filter(f => !taggedFileIds.has(f.id))
+      } else {
+        const taggedIds = taggedFileIdsMap.value.get(selectedTagIdForFilter.value) || []
+        result = result.filter(f => taggedIds.includes(f.id))
+      }
+    }
+
+    // 置顶文件排在最前
+    const pinnedFiles = result.filter(f => f.is_pinned === 1)
+    const unpinnedFiles = result.filter(f => f.is_pinned !== 1)
+    result = [...pinnedFiles, ...unpinnedFiles]
 
     // 按关键词搜索
     if (searchKeyword.value) {
@@ -51,8 +80,11 @@ export const useFileStore = defineStore('file', () => {
       )
     }
 
-    // 排序
-    result.sort((a, b) => {
+    // 排序（置顶的保持在前）
+    const pinned = result.filter(f => f.is_pinned === 1)
+    const unpinned = result.filter(f => f.is_pinned !== 1)
+    
+    unpinned.sort((a, b) => {
       switch (sortBy.value) {
         case 'name':
           return a.name.localeCompare(b.name)
@@ -64,7 +96,7 @@ export const useFileStore = defineStore('file', () => {
       }
     })
 
-    return result
+    return [...pinned, ...unpinned]
   })
 
   // 从数据库加载所有文件
@@ -81,7 +113,8 @@ export const useFileStore = defineStore('file', () => {
         size: f.size || 0,
         created_at: f.created_at,
         updated_at: f.updated_at,
-        folder_id: f.folder_id
+        folder_id: f.folder_id,
+        is_pinned: f.is_pinned || 0
       }))
     } catch (error) {
       console.error('[FileStore] Failed to load files:', error)
@@ -227,6 +260,36 @@ export const useFileStore = defineStore('file', () => {
     repoPath.value = path
   }
 
+  // 置顶/取消置顶文件
+  async function togglePin(fileId: number): Promise<void> {
+    const file = files.value.find(f => f.id === fileId)
+    if (!file) return
+    
+    const newPinned = file.is_pinned === 1 ? 0 : 1
+    const result = await window.electronAPI.dbUpdateFile(fileId, {
+      is_pinned: newPinned
+    } as any)
+    
+    if (result) {
+      file.is_pinned = newPinned
+    }
+  }
+
+  // 设置标签筛选
+  function setTagFilter(tagId: number | null): void {
+    selectedTagIdForFilter.value = tagId
+  }
+
+  // 更新标签文件映射
+  function updateTaggedFileIds(tagId: number, fileIds: number[]): void {
+    taggedFileIdsMap.value.set(tagId, fileIds)
+  }
+
+  // 同步获取文件标签ID数组（用于UI多选）
+  function getFileTags(fileId: number): number[] {
+    return [] // 需要从tagStore异步获取，这里返回空
+  }
+
   // 初始化（从存储恢复）
   async function init(): Promise<void> {
     // 恢复仓库路径
@@ -250,6 +313,8 @@ export const useFileStore = defineStore('file', () => {
     searchKeyword,
     sortBy,
     repoPath,
+    pinnedFiles,
+    selectedTagIdForFilter,
 
     // 计算属性
     filteredFiles,
@@ -265,6 +330,9 @@ export const useFileStore = defineStore('file', () => {
     addFolder,
     fetchFileTitle,
     setRepoPath,
+    togglePin,
+    setTagFilter,
+    updateTaggedFileIds,
     init
   }
 })

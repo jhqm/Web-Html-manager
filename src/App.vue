@@ -361,6 +361,43 @@ function toggleFullscreen() {
   }
 }
 
+function handleFileCommand(command: string, file: any) {
+  const [action, fileId] = command.split(':')
+  currentEditingFile.value = file
+  
+  switch (action) {
+    case 'pin':
+      fileStore.togglePin(parseInt(fileId))
+      break
+    case 'tag':
+      tagStore.getFileTags(file.id).then(tags => {
+        selectedTags.value = tags.map(t => t.id)
+      })
+      showTagDialog.value = true
+      break
+    case 'rename':
+      renameTitle.value = file.title || file.name
+      showRenameDialog.value = true
+      break
+  }
+}
+
+async function handleTagSubmit() {
+  if (currentEditingFile.value) {
+    await tagStore.setFileTags(currentEditingFile.value.id, selectedTags.value)
+    ElMessage.success('标签更新成功')
+  }
+  showTagDialog.value = false
+}
+
+async function handleRenameSubmit() {
+  if (currentEditingFile.value) {
+    await fileStore.updateFile(currentEditingFile.value.id, { title: renameTitle.value } as any)
+    ElMessage.success('重命名成功')
+  }
+  showRenameDialog.value = false
+}
+
 onMounted(async () => {
   await fileStore.init()
   await tagStore.init()

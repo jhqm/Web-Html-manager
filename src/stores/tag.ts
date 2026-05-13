@@ -120,6 +120,35 @@ export const useTagStore = defineStore('tag', () => {
     }
   }
 
+  // 批量设置文件的标签
+  async function setFileTags(fileId: number, tagIds: number[]): Promise<boolean> {
+    try {
+      // 获取文件当前的所有标签
+      const currentTags = await getFileTags(fileId)
+      const currentTagIds = currentTags.map(t => t.id)
+      const newTagIds = tagIds
+
+      // 计算需要添加和删除的标签
+      const toAdd = newTagIds.filter(id => !currentTagIds.includes(id))
+      const toRemove = currentTagIds.filter(id => !newTagIds.includes(id))
+
+      // 添加新标签
+      for (const tagId of toAdd) {
+        await addTagToFile(fileId, tagId)
+      }
+
+      // 删除不需要的标签
+      for (const tagId of toRemove) {
+        await removeTagFromFile(fileId, tagId)
+      }
+
+      return true
+    } catch (error) {
+      console.error('[TagStore] Failed to set file tags:', error)
+      return false
+    }
+  }
+
   // 选择标签筛选
   function selectTag(tagId: number | null): void {
     selectedTagId.value = tagId
