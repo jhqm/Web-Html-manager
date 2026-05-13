@@ -25,41 +25,50 @@
     
     <!-- 主内容区 -->
     <div class="app-container">
-      <!-- 左侧边栏 -->
-      <div class="sidebar">
-        <!-- 文件夹 -->
-        <div class="sidebar-section">
-          <div class="sidebar-header">
-            <span style="font-weight: 500;">文件夹</span>
-          </div>
-          <div class="sidebar-content">
-            <div class="folder-tree">
-              <div
-                class="folder-item"
-                :class="{ active: fileStore.currentFolder === null }"
-                @click="fileStore.selectFolder(null)"
-              >
-                <Folder class="folder-icon" />
-                <span>全部文件</span>
-              </div>
-              
-              <div
-                v-for="folder in fileStore.folders"
-                :key="folder.id"
-                class="folder-item"
-                :class="{ active: fileStore.currentFolder === folder.id }"
-                @click="fileStore.selectFolder(folder.id)"
-              >
-                <Folder class="folder-icon" />
-                <span>{{ folder.name }}</span>
+      <!-- 左侧边栏（可折叠） -->
+      <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <!-- 折叠按钮 -->
+        <div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+          <el-icon v-if="sidebarCollapsed"><ArrowRight /></el-icon>
+          <el-icon v-else><ArrowLeft /></el-icon>
+        </div>
+        
+        <!-- 侧边栏内容 -->
+        <div class="sidebar-content" v-show="!sidebarCollapsed">
+          <!-- 文件夹 -->
+          <div class="sidebar-section">
+            <div class="sidebar-header">
+              <span style="font-weight: 500;">文件夹</span>
+            </div>
+            <div class="sidebar-content-inner">
+              <div class="folder-tree">
+                <div
+                  class="folder-item"
+                  :class="{ active: fileStore.currentFolder === null }"
+                  @click="fileStore.selectFolder(null)"
+                >
+                  <Folder class="folder-icon" />
+                  <span>全部文件</span>
+                </div>
+                
+                <div
+                  v-for="folder in fileStore.folders"
+                  :key="folder.id"
+                  class="folder-item"
+                  :class="{ active: fileStore.currentFolder === folder.id }"
+                  @click="fileStore.selectFolder(folder.id)"
+                >
+                  <Folder class="folder-icon" />
+                  <span>{{ folder.name }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <!-- 标签 -->
-        <div class="sidebar-section">
-          <TagManager />
+          
+          <!-- 标签 -->
+          <div class="sidebar-section">
+            <TagManager />
+          </div>
         </div>
       </div>
       
@@ -83,11 +92,34 @@
             class="file-item"
             :class="{ active: fileStore.currentFile?.id === file.id }"
             @click="selectFile(file)"
+            @mouseenter="hoveredFileId = file.id"
+            @mouseleave="hoveredFileId = null"
           >
             <div class="file-item-title">{{ file.title || file.name }}</div>
             <div class="file-item-meta">
               <span>{{ formatDate(file.updated_at) }}</span>
               <span>{{ formatSize(file.size) }}</span>
+            </div>
+            <!-- 文件操作按钮 -->
+            <div class="file-item-actions" v-show="hoveredFileId === file.id">
+              <el-dropdown trigger="click" @command="(cmd: string) => handleFileCommand(cmd, file)">
+                <el-button size="small" text circle @click.stop>
+                  <el-icon><More /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :command="'pin:' + file.id">
+                      <el-icon><Star /></el-icon> {{ file.isPinned ? '取消置顶' : '置顶' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item :command="'tag:' + file.id">
+                      <el-icon><PriceTag /></el-icon> 标签管理
+                    </el-dropdown-item>
+                    <el-dropdown-item :command="'rename:' + file.id">
+                      <el-icon><Edit /></el-icon> 重命名
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
         </div>
@@ -184,6 +216,31 @@
       </template>
     </el-dialog>
     
+    <!-- 标签管理弹窗 -->
+    <el-dialog v-model="showTagDialog" title="标签管理" width="400px">
+      <el-select v-model="selectedTags" multiple placeholder="选择标签" style="width: 100%;">
+        <el-option
+          v-for="tag in tagStore.tags"
+          :key="tag.id"
+          :label="tag.name"
+          :value="tag.id"
+        />
+      </el-select>
+      <template #footer>
+        <el-button @click="showTagDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleTagSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+    
+    <!-- 重命名弹窗 -->
+    <el-dialog v-model="showRenameDialog" title="重命名文件" width="400px">
+      <el-input v-model="renameTitle" placeholder="请输入文件标题" />
+      <template #footer>
+        <el-button @click="showRenameDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleRenameSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+    
     <!-- 设置面板 -->
     <el-drawer v-model="showSettings" title="设置" size="350px" direction="rtl">
       <div class="settings-content">
@@ -213,7 +270,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Search, Folder, FolderAdd, Refresh, Setting, FolderOpened, Document, TopRight, FullScreen, Camera, Fold, CaretTop, Delete, Upload } from '@element-plus/icons-vue'
+import { Search, Folder, FolderAdd, Refresh, Setting, FolderOpened, Document, TopRight, FullScreen, Camera, Fold, CaretTop, Delete, Upload, ArrowLeft, ArrowRight, More, Star, PriceTag, Edit } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useFileStore } from './stores/file'
 import { useTagStore } from './stores/tag'
@@ -236,6 +293,23 @@ const showDeleteDialog = ref(false)
 const deleting = ref(false)
 const showSettings = ref(false)
 const autoSnapshot = ref(true)
+
+// 侧边栏折叠状态
+const sidebarCollapsed = ref(false)
+
+// 鼠标悬停的文件ID
+const hoveredFileId = ref<number | null>(null)
+
+// 当前编辑的文件（用于标签和重命名）
+const currentEditingFile = ref<any>(null)
+
+// 标签管理相关
+const showTagDialog = ref(false)
+const selectedTags = ref<number[]>([])
+
+// 重命名相关
+const showRenameDialog = ref(false)
+const renameTitle = ref('')
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -361,7 +435,7 @@ function toggleFullscreen() {
   }
 }
 
-function handleFileCommand(command: string, file: any) {
+async function handleFileCommand(command: string, file: any) {
   const [action, fileId] = command.split(':')
   currentEditingFile.value = file
   
@@ -371,7 +445,7 @@ function handleFileCommand(command: string, file: any) {
       break
     case 'tag':
       tagStore.getFileTags(file.id).then(tags => {
-        selectedTags.value = tags.map(t => t.id)
+        selectedTags.value = tags.map((t: any) => t.id)
       })
       showTagDialog.value = true
       break
@@ -405,6 +479,83 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 侧边栏折叠样式 */
+.sidebar {
+  position: relative;
+  width: 220px;
+  min-width: 220px;
+  background: #fafafa;
+  border-right: 1px solid #e4e7ed;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.sidebar.collapsed {
+  width: 40px;
+  min-width: 40px;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 40px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s;
+}
+
+.sidebar-toggle:hover {
+  background: #ecf5ff;
+  color: var(--primary-color);
+}
+
+.sidebar-content {
+  padding-right: 20px;
+}
+
+.sidebar-content-inner {
+  padding: 0 8px;
+}
+
+.sidebar-section { border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
+.sidebar-section:last-child { border-bottom: none; }
+
+/* 文件卡片操作按钮 */
+.file-item {
+  position: relative;
+  cursor: pointer;
+}
+
+.file-item-actions {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* 下拉菜单样式，确保相对于触发器定位 */
+.file-actions-dropdown {
+  position: absolute !important;
+  left: auto !important;
+  right: auto !important;
+}
+
+.file-actions-dropdown.el-popper[data-popper-placement^="bottom-start"] {
+  left: auto !important;
+  right: 0 !important;
+}
+
+/* 版本相关样式 */
 .version-expand {
   position: fixed;
   bottom: 0;
@@ -440,9 +591,6 @@ onMounted(async () => {
 .version-number { font-weight: 600; color: var(--primary-color); }
 .version-time { color: #909399; font-size: 12px; }
 .version-actions { margin-top: 8px; }
-
-.sidebar-section { border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
-.sidebar-section:last-child { border-bottom: none; }
 
 .settings-content { padding: 0 16px; }
 .about-section { margin-top: 20px; }

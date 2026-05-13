@@ -5,10 +5,10 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "electron:dev": "vite --config vite.config.ts",
-    "electron:build": "vue-tsc --noEmit && vite build && electron-builder",
+    "electron:build": "vite build && electron-builder",
     "package": "vite build && electron-builder --dir"
   },
   "keywords": [

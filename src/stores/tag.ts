@@ -174,6 +174,7 @@ export const useTagStore = defineStore('tag', () => {
     removeTagFromFile,
     getFileTags,
     getTagFileIds,
+    setFileTags,
     selectTag,
     init
   }
