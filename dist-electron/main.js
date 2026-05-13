@@ -263,6 +263,12 @@ function deleteVersionsByFileId(fileId) {
   const result = stmt.run(fileId);
   return result.changes > 0;
 }
+function updateVersionPath(id, newPath) {
+  const database = getDatabase();
+  const stmt = database.prepare("UPDATE versions SET version_path = ? WHERE id = ?");
+  const result = stmt.run(newPath, id);
+  return result.changes > 0;
+}
 function insertTag(tag) {
   const database = getDatabase();
   const stmt = database.prepare("INSERT INTO tags (name, color) VALUES (?, ?)");
@@ -495,6 +501,56 @@ electron.ipcMain.handle("open-external", async (_event, url) => {
   const { shell } = await import("electron");
   shell.openExternal(url);
 });
+electron.ipcMain.handle("rename-file", async (_event, oldPath, newBaseName, versionsDir) => {
+  try {
+    if (!fs.existsSync(oldPath)) {
+      return { success: false, error: "原文件不存在" };
+    }
+    const dir = path.dirname(oldPath);
+    const oldName = path.basename(oldPath);
+    const oldExt = path.extname(oldName);
+    const trimmed = (newBaseName || "").trim();
+    if (!trimmed) {
+      return { success: false, error: "新文件名不能为空" };
+    }
+    if (/[\\/\x00<>:"|?*]/.test(trimmed)) {
+      return { success: false, error: "文件名包含非法字符" };
+    }
+    const hasExt = path.extname(trimmed) !== "";
+    const newName = hasExt ? trimmed : `${trimmed}${oldExt}`;
+    const newPath = path.join(dir, newName);
+    if (newPath === oldPath) {
+      return { success: true, newPath, newName, renamedSnapshots: [] };
+    }
+    if (fs.existsSync(newPath)) {
+      return { success: false, error: "目标文件名已存在" };
+    }
+    fs.renameSync(oldPath, newPath);
+    const renamedSnapshots = [];
+    if (versionsDir && fs.existsSync(versionsDir)) {
+      try {
+        const entries = fs.readdirSync(versionsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isFile()) continue;
+          if (!entry.name.endsWith(`_${oldName}`)) continue;
+          const prefix = entry.name.slice(0, entry.name.length - oldName.length);
+          const snapOld = path.join(versionsDir, entry.name);
+          const snapNew = path.join(versionsDir, `${prefix}${newName}`);
+          if (snapOld === snapNew) continue;
+          if (fs.existsSync(snapNew)) continue;
+          fs.renameSync(snapOld, snapNew);
+          renamedSnapshots.push({ oldPath: snapOld, newPath: snapNew });
+        }
+      } catch (e) {
+        console.warn("[rename-file] migrate snapshots failed:", e);
+      }
+    }
+    return { success: true, newPath, newName, renamedSnapshots };
+  } catch (error) {
+    console.error("Error renaming file:", error);
+    return { success: false, error: String(error) };
+  }
+});
 electron.ipcMain.handle("db-get-all-files", async () => {
   return getAllFiles();
 });
@@ -533,6 +589,9 @@ electron.ipcMain.handle("db-get-versions-by-file-id", async (_event, fileId) => 
 });
 electron.ipcMain.handle("db-delete-versions-by-file-id", async (_event, fileId) => {
   return deleteVersionsByFileId(fileId);
+});
+electron.ipcMain.handle("db-update-version-path", async (_event, id, newPath) => {
+  return updateVersionPath(id, newPath);
 });
 electron.ipcMain.handle("db-get-all-tags", async () => {
   return getAllTags();

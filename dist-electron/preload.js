@@ -19,6 +19,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   getAllFolders: (rootPath) => electron.ipcRenderer.invoke("get-all-folders", rootPath),
   // 打开外部浏览器
   openExternal: (url) => electron.ipcRenderer.invoke("open-external", url),
+  // 重命名磁盘文件（同时迁移同名版本快照）
+  renameFile: (oldPath, newBaseName, versionsDir) => electron.ipcRenderer.invoke("rename-file", oldPath, newBaseName, versionsDir),
   // ============ 数据库操作 ============
   // 文件相关
   dbGetAllFiles: () => electron.ipcRenderer.invoke("db-get-all-files"),
@@ -36,6 +38,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   dbInsertVersion: (version) => electron.ipcRenderer.invoke("db-insert-version", version),
   dbGetVersionsByFileId: (fileId) => electron.ipcRenderer.invoke("db-get-versions-by-file-id", fileId),
   dbDeleteVersionsByFileId: (fileId) => electron.ipcRenderer.invoke("db-delete-versions-by-file-id", fileId),
+  dbUpdateVersionPath: (id, newPath) => electron.ipcRenderer.invoke("db-update-version-path", id, newPath),
   // 标签相关
   dbGetAllTags: () => electron.ipcRenderer.invoke("db-get-all-tags"),
   dbInsertTag: (tag) => electron.ipcRenderer.invoke("db-insert-tag", tag),

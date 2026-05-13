@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { initDatabase, closeDatabase, getAllFiles, getFileByPath, insertFile, updateFile, deleteFile, deleteFileByPath, getAllFolders, insertFolder, getFolderByPath, insertVersion, getVersionsByFileId, deleteVersionsByFileId, getAllTags, insertTag, updateTag, deleteTag, addTagToFile, removeTagFromFile, getTagsByFileId, getFilesByTagId, setSetting, getSetting, getFileById } from './database'
+import { initDatabase, closeDatabase, getAllFiles, getFileByPath, insertFile, updateFile, deleteFile, deleteFileByPath, getAllFolders, insertFolder, getFolderByPath, insertVersion, getVersionsByFileId, deleteVersionsByFileId, updateVersionPath, getAllTags, insertTag, updateTag, deleteTag, addTagToFile, removeTagFromFile, getTagsByFileId, getFilesByTagId, setSetting, getSetting, getFileById } from './database'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -195,6 +195,81 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   shell.openExternal(url)
 })
 
+// IPC: 重命名磁盘文件（同时迁移版本快照）
+// payload: { oldPath, newBaseName, versionsDir? }
+//  - newBaseName: 不带扩展名的新文件名（如 "my-page"）；若包含扩展名则原样使用
+//  - versionsDir: 可选，版本快照目录（一般为 <repoPath>/.versions）
+// 返回：{ success, newPath?, newName?, renamedSnapshots?: Array<{ oldPath, newPath }>, error? }
+ipcMain.handle('rename-file', async (
+  _event,
+  oldPath: string,
+  newBaseName: string,
+  versionsDir?: string
+) => {
+  try {
+    if (!fs.existsSync(oldPath)) {
+      return { success: false, error: '原文件不存在' }
+    }
+
+    const dir = path.dirname(oldPath)
+    const oldName = path.basename(oldPath)
+    const oldExt = path.extname(oldName)
+
+    // 计算新文件名：若用户已带扩展名则用之，否则保留原扩展名
+    const trimmed = (newBaseName || '').trim()
+    if (!trimmed) {
+      return { success: false, error: '新文件名不能为空' }
+    }
+    // 简单合法性校验（禁止路径分隔符与控制字符）
+    if (/[\\/\x00<>:"|?*]/.test(trimmed)) {
+      return { success: false, error: '文件名包含非法字符' }
+    }
+
+    const hasExt = path.extname(trimmed) !== ''
+    const newName = hasExt ? trimmed : `${trimmed}${oldExt}`
+    const newPath = path.join(dir, newName)
+
+    if (newPath === oldPath) {
+      return { success: true, newPath, newName, renamedSnapshots: [] }
+    }
+
+    // 目标已存在则拒绝（不覆盖）
+    if (fs.existsSync(newPath)) {
+      return { success: false, error: '目标文件名已存在' }
+    }
+
+    // 1) 重命名主文件
+    fs.renameSync(oldPath, newPath)
+
+    // 2) 迁移版本快照：命名规则 `${timestamp}_${oldName}` → `${timestamp}_${newName}`
+    const renamedSnapshots: Array<{ oldPath: string; newPath: string }> = []
+    if (versionsDir && fs.existsSync(versionsDir)) {
+      try {
+        const entries = fs.readdirSync(versionsDir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (!entry.isFile()) continue
+          // 仅处理以 _<oldName> 结尾的快照
+          if (!entry.name.endsWith(`_${oldName}`)) continue
+          const prefix = entry.name.slice(0, entry.name.length - oldName.length) // 含末尾的 "_"
+          const snapOld = path.join(versionsDir, entry.name)
+          const snapNew = path.join(versionsDir, `${prefix}${newName}`)
+          if (snapOld === snapNew) continue
+          if (fs.existsSync(snapNew)) continue // 安全起见，跳过冲突项
+          fs.renameSync(snapOld, snapNew)
+          renamedSnapshots.push({ oldPath: snapOld, newPath: snapNew })
+        }
+      } catch (e) {
+        console.warn('[rename-file] migrate snapshots failed:', e)
+      }
+    }
+
+    return { success: true, newPath, newName, renamedSnapshots }
+  } catch (error) {
+    console.error('Error renaming file:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
 // ============ 数据库操作 ============
 
 // 文件相关
@@ -210,7 +285,7 @@ ipcMain.handle('db-insert-file', async (_event, file: { name: string; path: stri
   return insertFile(file)
 })
 
-ipcMain.handle('db-update-file', async (_event, id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null }) => {
+ipcMain.handle('db-update-file', async (_event, id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null; is_pinned?: number }) => {
   return updateFile(id, file)
 })
 
@@ -250,6 +325,10 @@ ipcMain.handle('db-get-versions-by-file-id', async (_event, fileId: number) => {
 
 ipcMain.handle('db-delete-versions-by-file-id', async (_event, fileId: number) => {
   return deleteVersionsByFileId(fileId)
+})
+
+ipcMain.handle('db-update-version-path', async (_event, id: number, newPath: string) => {
+  return updateVersionPath(id, newPath)
 })
 
 // 标签相关

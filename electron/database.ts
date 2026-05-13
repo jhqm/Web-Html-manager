@@ -333,6 +333,13 @@ export function deleteVersionsByFileId(fileId: number): boolean {
   return result.changes > 0
 }
 
+export function updateVersionPath(id: number, newPath: string): boolean {
+  const database = getDatabase()
+  const stmt = database.prepare('UPDATE versions SET version_path = ? WHERE id = ?')
+  const result = stmt.run(newPath, id)
+  return result.changes > 0
+}
+
 // ============ 标签操作 ============
 
 export interface TagRecord {

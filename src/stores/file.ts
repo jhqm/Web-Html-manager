@@ -174,9 +174,12 @@ export const useFileStore = defineStore('file', () => {
   async function updateFile(id: number, updates: Partial<FileRecord>): Promise<boolean> {
     try {
       const result = await window.electronAPI.dbUpdateFile(id, {
+        name: updates.name,
+        path: updates.path,
         title: updates.title,
         description: updates.description,
         size: updates.size,
+        is_pinned: updates.is_pinned,
         updated_at: new Date().toISOString()
       })
 
@@ -187,6 +190,68 @@ export const useFileStore = defineStore('file', () => {
     } catch (error) {
       console.error('[FileStore] Failed to update file:', error)
       return false
+    }
+  }
+
+  // 重命名文件：同时把磁盘上的真实文件名改掉
+  // newBaseName: 不含扩展名的新名字（也允许带扩展名，会原样使用）
+  // 返回 { success, newPath?, newName?, error? }
+  async function renameFile(
+    id: number,
+    newBaseName: string
+  ): Promise<{ success: boolean; newPath?: string; newName?: string; error?: string }> {
+    const file = files.value.find(f => f.id === id)
+    if (!file) return { success: false, error: '文件不存在' }
+
+    const versionsDir = repoPath.value ? `${repoPath.value}/.versions` : undefined
+
+    try {
+      // 1) 磁盘上重命名（含同名快照迁移）
+      const renameRes = await window.electronAPI.renameFile(file.path, newBaseName, versionsDir)
+      if (!renameRes.success || !renameRes.newPath || !renameRes.newName) {
+        return { success: false, error: renameRes.error || '磁盘重命名失败' }
+      }
+
+      // 2) 同步数据库 files 表（name + path + title）
+      //    title 也一并改成新的 base 名，否则列表/预览仍展示旧 title 看起来像"没刷新"
+      const dotIdx = renameRes.newName.lastIndexOf('.')
+      const newTitle = dotIdx > 0 ? renameRes.newName.slice(0, dotIdx) : renameRes.newName
+      const ok = await window.electronAPI.dbUpdateFile(id, {
+        name: renameRes.newName,
+        path: renameRes.newPath,
+        title: newTitle,
+        updated_at: new Date().toISOString()
+      })
+      if (!ok) {
+        return { success: false, error: '数据库更新失败' }
+      }
+
+      // 3) 同步 versions 表中的 version_path（与磁盘上已迁移的快照一一对应）
+      if (renameRes.renamedSnapshots && renameRes.renamedSnapshots.length > 0) {
+        try {
+          const dbVersions = await window.electronAPI.dbGetVersionsByFileId(id)
+          for (const v of dbVersions) {
+            const hit = renameRes.renamedSnapshots.find(s => s.oldPath === v.version_path)
+            if (hit) {
+              await window.electronAPI.dbUpdateVersionPath(v.id, hit.newPath)
+            }
+          }
+        } catch (e) {
+          console.warn('[FileStore] sync version_path failed:', e)
+        }
+      }
+
+      // 4) 刷新内存状态
+      await loadFiles()
+      if (currentFile.value?.id === id) {
+        const fresh = files.value.find(f => f.id === id) || null
+        currentFile.value = fresh
+      }
+
+      return { success: true, newPath: renameRes.newPath, newName: renameRes.newName }
+    } catch (error) {
+      console.error('[FileStore] Failed to rename file:', error)
+      return { success: false, error: String(error) }
     }
   }
 
@@ -268,7 +333,7 @@ export const useFileStore = defineStore('file', () => {
     const newPinned = file.is_pinned === 1 ? 0 : 1
     const result = await window.electronAPI.dbUpdateFile(fileId, {
       is_pinned: newPinned
-    } as any)
+    })
     
     if (result) {
       file.is_pinned = newPinned
@@ -324,6 +389,7 @@ export const useFileStore = defineStore('file', () => {
     loadFolders,
     addFile,
     updateFile,
+    renameFile,
     removeFile,
     selectFile,
     selectFolder,

@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 打开外部浏览器
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+
+  // 重命名磁盘文件（同时迁移同名版本快照）
+  renameFile: (oldPath: string, newBaseName: string, versionsDir?: string) =>
+    ipcRenderer.invoke('rename-file', oldPath, newBaseName, versionsDir),
   
   // ============ 数据库操作 ============
   
@@ -39,7 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dbGetFileById: (id: number) => ipcRenderer.invoke('db-get-file-by-id', id),
   dbInsertFile: (file: { name: string; path: string; title?: string; description?: string; size?: number; created_at?: string; updated_at?: string; folder_id?: number | null }) => 
     ipcRenderer.invoke('db-insert-file', file),
-  dbUpdateFile: (id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null }) => 
+  dbUpdateFile: (id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null; is_pinned?: number }) => 
     ipcRenderer.invoke('db-update-file', id, file),
   dbDeleteFile: (id: number) => ipcRenderer.invoke('db-delete-file', id),
   dbDeleteFileByPath: (filePath: string) => ipcRenderer.invoke('db-delete-file-by-path', filePath),
@@ -56,6 +60,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('db-insert-version', version),
   dbGetVersionsByFileId: (fileId: number) => ipcRenderer.invoke('db-get-versions-by-file-id', fileId),
   dbDeleteVersionsByFileId: (fileId: number) => ipcRenderer.invoke('db-delete-versions-by-file-id', fileId),
+  dbUpdateVersionPath: (id: number, newPath: string) => ipcRenderer.invoke('db-update-version-path', id, newPath),
   
   // 标签相关
   dbGetAllTags: () => ipcRenderer.invoke('db-get-all-tags'),
@@ -113,6 +118,13 @@ declare global {
         parentPath: string
       }>>
       openExternal: (url: string) => Promise<void>
+      renameFile: (oldPath: string, newBaseName: string, versionsDir?: string) => Promise<{
+        success: boolean
+        newPath?: string
+        newName?: string
+        renamedSnapshots?: Array<{ oldPath: string; newPath: string }>
+        error?: string
+      }>
       
       // 数据库操作
       dbGetAllFiles: () => Promise<Array<{
@@ -139,7 +151,7 @@ declare global {
         folder_id: number | null
       } | null>
       dbInsertFile: (file: { name: string; path: string; title?: string; description?: string; size?: number; created_at?: string; updated_at?: string; folder_id?: number | null }) => Promise<number>
-      dbUpdateFile: (id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null }) => Promise<boolean>
+      dbUpdateFile: (id: number, file: { name?: string; path?: string; title?: string; description?: string; size?: number; updated_at?: string; folder_id?: number | null; is_pinned?: number }) => Promise<boolean>
       dbDeleteFile: (id: number) => Promise<boolean>
       dbDeleteFileByPath: (filePath: string) => Promise<boolean>
       dbGetFileByPath: (filePath: string) => Promise<{
@@ -179,6 +191,7 @@ declare global {
         remark: string
       }>>
       dbDeleteVersionsByFileId: (fileId: number) => Promise<boolean>
+      dbUpdateVersionPath: (id: number, newPath: string) => Promise<boolean>
       
       dbGetAllTags: () => Promise<Array<{
         id: number

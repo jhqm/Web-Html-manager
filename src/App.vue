@@ -254,11 +254,25 @@
     </el-dialog>
     
     <!-- 重命名弹窗 -->
-    <el-dialog v-model="showRenameDialog" title="重命名文件" width="400px">
-      <el-input v-model="renameTitle" placeholder="请输入文件标题" />
+    <el-dialog v-model="showRenameDialog" title="重命名文件" width="460px">
+      <el-form label-position="top">
+        <el-form-item label="新文件名（将同时修改磁盘上的真实文件名）">
+          <el-input
+            v-model="renameBaseName"
+            placeholder="请输入文件名（不含扩展名）"
+            @keyup.enter="handleRenameSubmit"
+          >
+            <template #append>{{ renameExt || '.html' }}</template>
+          </el-input>
+        </el-form-item>
+        <div style="color: #909399; font-size: 12px; line-height: 1.6;">
+          原文件名：{{ currentEditingFile?.name }}<br />
+          路径：{{ currentEditingFile?.path }}
+        </div>
+      </el-form>
       <template #footer>
         <el-button @click="showRenameDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleRenameSubmit">确定</el-button>
+        <el-button type="primary" :loading="renaming" @click="handleRenameSubmit">确定</el-button>
       </template>
     </el-dialog>
     
@@ -337,7 +351,9 @@ const selectedTags = ref<number[]>([])
 
 // 重命名相关
 const showRenameDialog = ref(false)
-const renameTitle = ref('')
+const renameBaseName = ref('')
+const renameExt = ref('.html')
+const renaming = ref(false)
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -477,10 +493,20 @@ async function handleFileCommand(command: string, file: any) {
       })
       showTagDialog.value = true
       break
-    case 'rename':
-      renameTitle.value = file.title || file.name
+    case 'rename': {
+      // 解析原文件名 → base + ext，只让用户编辑 base
+      const fullName: string = file.name || ''
+      const dotIdx = fullName.lastIndexOf('.')
+      if (dotIdx > 0) {
+        renameBaseName.value = fullName.slice(0, dotIdx)
+        renameExt.value = fullName.slice(dotIdx)
+      } else {
+        renameBaseName.value = fullName
+        renameExt.value = '.html'
+      }
       showRenameDialog.value = true
       break
+    }
   }
 }
 
@@ -493,11 +519,43 @@ async function handleTagSubmit() {
 }
 
 async function handleRenameSubmit() {
-  if (currentEditingFile.value) {
-    await fileStore.updateFile(currentEditingFile.value.id, { title: renameTitle.value } as any)
-    ElMessage.success('重命名成功')
+  if (!currentEditingFile.value) {
+    showRenameDialog.value = false
+    return
   }
-  showRenameDialog.value = false
+  const trimmed = renameBaseName.value.trim()
+  if (!trimmed) {
+    ElMessage.warning('文件名不能为空')
+    return
+  }
+  if (/[\\/<>:"|?*]/.test(trimmed)) {
+    ElMessage.warning('文件名包含非法字符')
+    return
+  }
+
+  renaming.value = true
+  try {
+    const fileId = currentEditingFile.value.id
+    const wasCurrent = fileStore.currentFile?.id === fileId
+    const res = await fileStore.renameFile(fileId, trimmed)
+    if (!res.success) {
+      ElMessage.error(res.error || '重命名失败')
+      return
+    }
+    ElMessage.success('重命名成功')
+    showRenameDialog.value = false
+
+    // 若是当前预览的文件，刷新 iframe 指向新路径
+    if (wasCurrent && previewFrame.value && fileStore.currentFile) {
+      previewFrame.value.src = 'file://' + fileStore.currentFile.path
+    }
+    // 重新加载该文件的版本列表（version_path 已迁移）
+    if (wasCurrent) {
+      await versionStore.loadVersions(fileId)
+    }
+  } finally {
+    renaming.value = false
+  }
 }
 
 // 下拉菜单显示/隐藏时更新状态
