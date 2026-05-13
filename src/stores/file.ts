@@ -194,7 +194,6 @@ export const useFileStore = defineStore('file', () => {
     parent_id?: number | null
   }): Promise<number | null> {
     try {
-      const now = new Date().toISOString()
       const id = await window.electronAPI.dbInsertFolder({
         name: folder.name,
         path: folder.path,

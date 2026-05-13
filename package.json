@@ -11,17 +11,24 @@
     "electron:build": "vue-tsc --noEmit && vite build && electron-builder",
     "package": "vite build && electron-builder --dir"
   },
-  "keywords": ["html", "asset-manager", "electron", "vue"],
+  "keywords": [
+    "html",
+    "asset-manager",
+    "electron",
+    "vue"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "vue": "^3.4.21",
-    "pinia": "^2.1.7",
-    "element-plus": "^2.6.1",
+    "@element-plus/icons-vue": "^2.3.1",
     "better-sqlite3": "^9.4.3",
-    "@element-plus/icons-vue": "^2.3.1"
+    "element-plus": "^2.6.1",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "@types/better-sqlite3": "^7.6.9",
     "@vitejs/plugin-vue": "^5.0.4",
     "electron": "^29.1.4",
     "electron-builder": "^24.13.3",
@@ -29,7 +36,6 @@
     "vite": "^5.1.6",
     "vite-plugin-electron": "^0.28.4",
     "vite-plugin-electron-renderer": "^0.14.5",
-    "vue-tsc": "^2.0.6",
-    "@types/better-sqlite3": "^7.6.9"
+    "vue-tsc": "^2.0.6"
   }
 }

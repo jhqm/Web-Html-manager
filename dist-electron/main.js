@@ -1,4 +1,54 @@
-"use strict";var N=Object.create;var m=Object.defineProperty;var b=Object.getOwnPropertyDescriptor;var _=Object.getOwnPropertyNames;var S=Object.getPrototypeOf,I=Object.prototype.hasOwnProperty;var O=(t,e,n,a)=>{if(e&&typeof e=="object"||typeof e=="function")for(let r of _(e))!I.call(t,r)&&r!==n&&m(t,r,{get:()=>e[r],enumerable:!(a=b(e,r))||a.enumerable});return t};var F=(t,e,n)=>(n=t!=null?N(S(t)):{},O(e||!t||!t.__esModule?m(n,"default",{value:t,enumerable:!0}):n,t));const s=require("electron"),u=require("path"),l=require("fs"),L=require("better-sqlite3");function v(){const t=s.app.getPath("userData");return l.existsSync(t)||l.mkdirSync(t,{recursive:!0}),t}function M(){return u.join(v(),"html-manager.db")}let d=null;function y(){if(d)return d;const t=M();return console.log("[Database] Initializing at:",t),d=new L(t),d.pragma("journal_mode = WAL"),A(),console.log("[Database] Initialization complete"),d}function A(){d&&(d.exec(`
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+const electron = require("electron");
+const path = require("path");
+const fs = require("fs");
+const Database = require("better-sqlite3");
+function getUserDataPath() {
+  const userDataPath = electron.app.getPath("userData");
+  if (!fs.existsSync(userDataPath)) {
+    fs.mkdirSync(userDataPath, { recursive: true });
+  }
+  return userDataPath;
+}
+function getDbPath() {
+  return path.join(getUserDataPath(), "html-manager.db");
+}
+let db = null;
+function initDatabase() {
+  if (db) return db;
+  const dbPath = getDbPath();
+  console.log("[Database] Initializing at:", dbPath);
+  db = new Database(dbPath);
+  db.pragma("journal_mode = WAL");
+  createTables();
+  console.log("[Database] Initialization complete");
+  return db;
+}
+function createTables() {
+  if (!db) return;
+  db.exec(`
     CREATE TABLE IF NOT EXISTS files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -11,7 +61,8 @@
       folder_id INTEGER,
       FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
     )
-  `),d.exec(`
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS folders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -20,7 +71,8 @@
       created_at TEXT NOT NULL,
       FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
     )
-  `),d.exec(`
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       file_id INTEGER NOT NULL,
@@ -29,13 +81,15 @@
       remark TEXT DEFAULT '',
       FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
     )
-  `),d.exec(`
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS tags (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE NOT NULL,
       color TEXT DEFAULT '#409EFF'
     )
-  `),d.exec(`
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS file_tags (
       file_id INTEGER NOT NULL,
       tag_id INTEGER NOT NULL,
@@ -43,28 +97,533 @@
       FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
       FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     )
-  `),d.exec(`
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     )
-  `),console.log("[Database] Tables created"))}function c(){return d||y()}function R(){d&&(d.close(),d=null,console.log("[Database] Closed"))}function D(t){const e=c(),n=new Date().toISOString();return e.prepare(`
+  `);
+  console.log("[Database] Tables created");
+}
+function getDatabase() {
+  if (!db) {
+    return initDatabase();
+  }
+  return db;
+}
+function closeDatabase() {
+  if (db) {
+    db.close();
+    db = null;
+    console.log("[Database] Closed");
+  }
+}
+function insertFile(file) {
+  const database = getDatabase();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const stmt = database.prepare(`
     INSERT INTO files (name, path, title, description, size, created_at, updated_at, folder_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(t.name,t.path,t.title||"",t.description||"",t.size||0,t.created_at||n,t.updated_at||n,t.folder_id??null).lastInsertRowid}function w(t,e){const n=c(),a=[],r=[];return e.name!==void 0&&(a.push("name = ?"),r.push(e.name)),e.path!==void 0&&(a.push("path = ?"),r.push(e.path)),e.title!==void 0&&(a.push("title = ?"),r.push(e.title)),e.description!==void 0&&(a.push("description = ?"),r.push(e.description)),e.size!==void 0&&(a.push("size = ?"),r.push(e.size)),e.updated_at!==void 0&&(a.push("updated_at = ?"),r.push(e.updated_at)),e.folder_id!==void 0&&(a.push("folder_id = ?"),r.push(e.folder_id)),a.length===0?!1:(r.push(t),n.prepare(`UPDATE files SET ${a.join(", ")} WHERE id = ?`).run(...r).changes>0)}function C(t){return c().prepare("DELETE FROM files WHERE id = ?").run(t).changes>0}function U(t){return c().prepare("DELETE FROM files WHERE path = ?").run(t).changes>0}function W(t){return c().prepare("SELECT * FROM files WHERE path = ?").get(t)}function P(t){return c().prepare("SELECT * FROM files WHERE id = ?").get(t)}function X(){return c().prepare("SELECT * FROM files ORDER BY updated_at DESC").all()}function Y(t){const e=c(),n=new Date().toISOString();return e.prepare(`
+  `);
+  const result = stmt.run(
+    file.name,
+    file.path,
+    file.title || "",
+    file.description || "",
+    file.size || 0,
+    file.created_at || now,
+    file.updated_at || now,
+    file.folder_id ?? null
+  );
+  return result.lastInsertRowid;
+}
+function updateFile(id, file) {
+  const database = getDatabase();
+  const fields = [];
+  const values = [];
+  if (file.name !== void 0) {
+    fields.push("name = ?");
+    values.push(file.name);
+  }
+  if (file.path !== void 0) {
+    fields.push("path = ?");
+    values.push(file.path);
+  }
+  if (file.title !== void 0) {
+    fields.push("title = ?");
+    values.push(file.title);
+  }
+  if (file.description !== void 0) {
+    fields.push("description = ?");
+    values.push(file.description);
+  }
+  if (file.size !== void 0) {
+    fields.push("size = ?");
+    values.push(file.size);
+  }
+  if (file.updated_at !== void 0) {
+    fields.push("updated_at = ?");
+    values.push(file.updated_at);
+  }
+  if (file.folder_id !== void 0) {
+    fields.push("folder_id = ?");
+    values.push(file.folder_id);
+  }
+  if (fields.length === 0) return false;
+  values.push(id);
+  const stmt = database.prepare(`UPDATE files SET ${fields.join(", ")} WHERE id = ?`);
+  const result = stmt.run(...values);
+  return result.changes > 0;
+}
+function deleteFile(id) {
+  const database = getDatabase();
+  const stmt = database.prepare("DELETE FROM files WHERE id = ?");
+  const result = stmt.run(id);
+  return result.changes > 0;
+}
+function deleteFileByPath(filePath) {
+  const database = getDatabase();
+  const stmt = database.prepare("DELETE FROM files WHERE path = ?");
+  const result = stmt.run(filePath);
+  return result.changes > 0;
+}
+function getFileByPath(filePath) {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM files WHERE path = ?");
+  return stmt.get(filePath);
+}
+function getFileById(id) {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM files WHERE id = ?");
+  return stmt.get(id);
+}
+function getAllFiles() {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM files ORDER BY updated_at DESC");
+  return stmt.all();
+}
+function insertFolder(folder) {
+  const database = getDatabase();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const stmt = database.prepare(`
     INSERT INTO folders (name, parent_id, path, created_at)
     VALUES (?, ?, ?, ?)
-  `).run(t.name,t.parent_id??null,t.path,t.created_at||n).lastInsertRowid}function B(t){return c().prepare("SELECT * FROM folders WHERE path = ?").get(t)}function x(){return c().prepare("SELECT * FROM folders ORDER BY name").all()}function H(t){const e=c(),n=new Date().toISOString();return e.prepare(`
+  `);
+  const result = stmt.run(
+    folder.name,
+    folder.parent_id ?? null,
+    folder.path,
+    folder.created_at || now
+  );
+  return result.lastInsertRowid;
+}
+function getFolderByPath(folderPath) {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM folders WHERE path = ?");
+  return stmt.get(folderPath);
+}
+function getAllFolders() {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM folders ORDER BY name");
+  return stmt.all();
+}
+function insertVersion(version) {
+  const database = getDatabase();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const stmt = database.prepare(`
     INSERT INTO versions (file_id, version_path, snapshot_at, remark)
     VALUES (?, ?, ?, ?)
-  `).run(t.file_id,t.version_path,t.snapshot_at||n,t.remark||"").lastInsertRowid}function G(t){return c().prepare("SELECT * FROM versions WHERE file_id = ? ORDER BY snapshot_at DESC").all(t)}function j(t){return c().prepare("DELETE FROM versions WHERE file_id = ?").run(t).changes>0}function z(t){return c().prepare("INSERT INTO tags (name, color) VALUES (?, ?)").run(t.name,t.color||"#409EFF").lastInsertRowid}function K(t,e){const n=c(),a=[],r=[];return e.name!==void 0&&(a.push("name = ?"),r.push(e.name)),e.color!==void 0&&(a.push("color = ?"),r.push(e.color)),a.length===0?!1:(r.push(t),n.prepare(`UPDATE tags SET ${a.join(", ")} WHERE id = ?`).run(...r).changes>0)}function V(t){return c().prepare("DELETE FROM tags WHERE id = ?").run(t).changes>0}function k(){return c().prepare("SELECT * FROM tags ORDER BY name").all()}function $(t,e){const n=c();try{return n.prepare("INSERT INTO file_tags (file_id, tag_id) VALUES (?, ?)").run(t,e),!0}catch{return!1}}function q(t,e){return c().prepare("DELETE FROM file_tags WHERE file_id = ? AND tag_id = ?").run(t,e).changes>0}function Q(t){return c().prepare(`
+  `);
+  const result = stmt.run(
+    version.file_id,
+    version.version_path,
+    version.snapshot_at || now,
+    version.remark || ""
+  );
+  return result.lastInsertRowid;
+}
+function getVersionsByFileId(fileId) {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM versions WHERE file_id = ? ORDER BY snapshot_at DESC");
+  return stmt.all(fileId);
+}
+function deleteVersionsByFileId(fileId) {
+  const database = getDatabase();
+  const stmt = database.prepare("DELETE FROM versions WHERE file_id = ?");
+  const result = stmt.run(fileId);
+  return result.changes > 0;
+}
+function insertTag(tag) {
+  const database = getDatabase();
+  const stmt = database.prepare("INSERT INTO tags (name, color) VALUES (?, ?)");
+  const result = stmt.run(tag.name, tag.color || "#409EFF");
+  return result.lastInsertRowid;
+}
+function updateTag(id, tag) {
+  const database = getDatabase();
+  const fields = [];
+  const values = [];
+  if (tag.name !== void 0) {
+    fields.push("name = ?");
+    values.push(tag.name);
+  }
+  if (tag.color !== void 0) {
+    fields.push("color = ?");
+    values.push(tag.color);
+  }
+  if (fields.length === 0) return false;
+  values.push(id);
+  const stmt = database.prepare(`UPDATE tags SET ${fields.join(", ")} WHERE id = ?`);
+  const result = stmt.run(...values);
+  return result.changes > 0;
+}
+function deleteTag(id) {
+  const database = getDatabase();
+  const stmt = database.prepare("DELETE FROM tags WHERE id = ?");
+  const result = stmt.run(id);
+  return result.changes > 0;
+}
+function getAllTags() {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM tags ORDER BY name");
+  return stmt.all();
+}
+function addTagToFile(fileId, tagId) {
+  const database = getDatabase();
+  try {
+    const stmt = database.prepare("INSERT INTO file_tags (file_id, tag_id) VALUES (?, ?)");
+    stmt.run(fileId, tagId);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function removeTagFromFile(fileId, tagId) {
+  const database = getDatabase();
+  const stmt = database.prepare("DELETE FROM file_tags WHERE file_id = ? AND tag_id = ?");
+  const result = stmt.run(fileId, tagId);
+  return result.changes > 0;
+}
+function getTagsByFileId(fileId) {
+  const database = getDatabase();
+  const stmt = database.prepare(`
     SELECT t.* FROM tags t
     INNER JOIN file_tags ft ON t.id = ft.tag_id
     WHERE ft.file_id = ?
-  `).all(t)}function J(t){return c().prepare(`
+  `);
+  return stmt.all(fileId);
+}
+function getFilesByTagId(tagId) {
+  const database = getDatabase();
+  const stmt = database.prepare(`
     SELECT f.* FROM files f
     INNER JOIN file_tags ft ON f.id = ft.file_id
     WHERE ft.tag_id = ?
-  `).all(t)}function Z(t,e){c().prepare(`
+  `);
+  return stmt.all(tagId);
+}
+function setSetting(key, value) {
+  const database = getDatabase();
+  const stmt = database.prepare(`
     INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)
-  `).run(t,e)}function ee(t){const a=c().prepare("SELECT value FROM settings WHERE key = ?").get(t);return(a==null?void 0:a.value)??null}const te=process.env.NODE_ENV==="development"||!s.app.isPackaged;let h=null;function g(){h=new s.BrowserWindow({width:1400,height:900,minWidth:1e3,minHeight:700,webPreferences:{preload:u.join(__dirname,"preload.js"),nodeIntegration:!1,contextIsolation:!0,webSecurity:!1},show:!1}),h.once("ready-to-show",()=>{h==null||h.show()}),te?(h.loadURL("http://localhost:5173"),h.webContents.openDevTools()):h.loadFile(u.join(__dirname,"../dist/index.html"))}s.ipcMain.handle("select-folder",async()=>{const t=await s.dialog.showOpenDialog({properties:["openDirectory"]});return t.canceled?null:t.filePaths[0]});s.ipcMain.handle("read-directory",async(t,e)=>{try{const n=l.readdirSync(e,{withFileTypes:!0}),a=n.filter(i=>i.isFile()&&i.name.toLowerCase().endsWith(".html")).map(i=>{const o=u.join(e,i.name),E=l.statSync(o);return{name:i.name,path:o,size:E.size,createdAt:E.birthtime.toISOString(),updatedAt:E.mtime.toISOString()}}),r=n.filter(i=>i.isDirectory());return{files:a,folders:r}}catch(n){return console.error("Error reading directory:",n),{files:[],folders:[]}}});s.ipcMain.handle("read-file",async(t,e)=>{try{const n=l.readFileSync(e,"utf-8"),a=n.match(/<title[^>]*>([^<]*)<\/title>/i),r=a?a[1].trim():"",i=n.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i),o=i?i[1].trim():"";return{content:n,title:r,description:o}}catch(n){return console.error("Error reading file:",n),{content:"",title:"",description:""}}});s.ipcMain.handle("save-file",async(t,e,n)=>{try{return l.writeFileSync(e,n,"utf-8"),{success:!0}}catch(a){return console.error("Error saving file:",a),{success:!1,error:String(a)}}});s.ipcMain.handle("create-snapshot",async(t,e,n)=>{try{const a=u.basename(e),i=`${new Date().toISOString().replace(/[:.]/g,"-")}_${a}`;l.existsSync(n)||l.mkdirSync(n,{recursive:!0});const o=u.join(n,i);return l.copyFileSync(e,o),{success:!0,snapshotPath:o}}catch(a){return console.error("Error creating snapshot:",a),{success:!1,error:String(a)}}});s.ipcMain.handle("get-versions",async(t,e,n)=>{try{return l.existsSync(e)?l.readdirSync(e,{withFileTypes:!0}).filter(i=>i.isFile()&&i.name.endsWith(`_${n}`)).map(i=>{const o=u.join(e,i.name),E=l.statSync(o);return{name:i.name,path:o,createdAt:E.birthtime.toISOString()}}).sort((i,o)=>new Date(o.createdAt).getTime()-new Date(i.createdAt).getTime()):[]}catch(a){return console.error("Error getting versions:",a),[]}});s.ipcMain.handle("restore-version",async(t,e,n)=>{try{const a=l.readFileSync(e);return l.writeFileSync(n,a),{success:!0}}catch(a){return console.error("Error restoring version:",a),{success:!1,error:String(a)}}});s.ipcMain.handle("get-all-folders",async(t,e)=>{const n=[];function a(r,i=""){try{l.readdirSync(r,{withFileTypes:!0}).forEach(E=>{if(E.isDirectory()){const p=u.join(r,E.name);n.push({name:E.name,path:p,parentPath:i}),a(p,p)}})}catch(o){console.error("Error scanning directory:",o)}}return a(e),n});s.ipcMain.handle("open-external",async(t,e)=>{const{shell:n}=await import("electron");n.openExternal(e)});s.ipcMain.handle("db-get-all-files",async()=>X());s.ipcMain.handle("db-get-file-by-id",async(t,e)=>P(e));s.ipcMain.handle("db-insert-file",async(t,e)=>D(e));s.ipcMain.handle("db-update-file",async(t,e,n)=>w(e,n));s.ipcMain.handle("db-delete-file",async(t,e)=>C(e));s.ipcMain.handle("db-delete-file-by-path",async(t,e)=>U(e));s.ipcMain.handle("db-get-file-by-path",async(t,e)=>W(e));s.ipcMain.handle("db-get-all-folders",async()=>x());s.ipcMain.handle("db-insert-folder",async(t,e)=>Y(e));s.ipcMain.handle("db-get-folder-by-path",async(t,e)=>B(e));s.ipcMain.handle("db-insert-version",async(t,e)=>H(e));s.ipcMain.handle("db-get-versions-by-file-id",async(t,e)=>G(e));s.ipcMain.handle("db-delete-versions-by-file-id",async(t,e)=>j(e));s.ipcMain.handle("db-get-all-tags",async()=>k());s.ipcMain.handle("db-insert-tag",async(t,e)=>z(e));s.ipcMain.handle("db-update-tag",async(t,e,n)=>K(e,n));s.ipcMain.handle("db-delete-tag",async(t,e)=>V(e));s.ipcMain.handle("db-add-tag-to-file",async(t,e,n)=>$(e,n));s.ipcMain.handle("db-remove-tag-from-file",async(t,e,n)=>q(e,n));s.ipcMain.handle("db-get-tags-by-file-id",async(t,e)=>Q(e));s.ipcMain.handle("db-get-files-by-tag-id",async(t,e)=>J(e));s.ipcMain.handle("db-set-setting",async(t,e,n)=>(Z(e,n),!0));s.ipcMain.handle("db-get-setting",async(t,e)=>ee(e));s.ipcMain.handle("scan-html-files",async(t,e,n=!0)=>{const a=[];function r(i,o){try{const E=l.readdirSync(i,{withFileTypes:!0});for(const p of E){const f=u.join(i,p.name);if(p.isFile()&&p.name.toLowerCase().endsWith(".html")){const T=l.statSync(f);a.push({name:p.name,path:f,relativePath:u.relative(o,f),size:T.size,createdAt:T.birthtime.toISOString(),updatedAt:T.mtime.toISOString()})}else p.isDirectory()&&n&&p.name!==".versions"&&!p.name.startsWith(".")&&r(f,o)}}catch(E){console.error("Error scanning directory:",E)}}return r(e,e),a});s.ipcMain.handle("copy-file-to-repo",async(t,e,n)=>{try{const a=u.basename(e),r=u.join(n,a);let i=r;if(l.existsSync(r)){const o=u.extname(a),E=u.basename(a,o),p=Date.now();i=u.join(n,`${E}_${p}${o}`)}return l.copyFileSync(e,i),{success:!0,path:i}}catch(a){return console.error("Error copying file:",a),{success:!1,error:String(a)}}});s.ipcMain.handle("select-html-files",async()=>{const t=await s.dialog.showOpenDialog({properties:["openFile","multiSelections"],filters:[{name:"HTML Files",extensions:["html","htm"]}]});return t.canceled?[]:t.filePaths});s.app.whenReady().then(()=>{y(),g(),s.app.on("activate",()=>{s.BrowserWindow.getAllWindows().length===0&&g()})});s.app.on("window-all-closed",()=>{process.platform!=="darwin"&&(R(),s.app.quit())});s.app.on("before-quit",()=>{R()});
+  `);
+  stmt.run(key, value);
+}
+function getSetting(key) {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT value FROM settings WHERE key = ?");
+  const result = stmt.get(key);
+  return (result == null ? void 0 : result.value) ?? null;
+}
+const isDev = process.env.NODE_ENV === "development" || !electron.app.isPackaged;
+let mainWindow = null;
+function createWindow() {
+  mainWindow = new electron.BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1e3,
+    minHeight: 700,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false
+    },
+    show: false
+  });
+  mainWindow.once("ready-to-show", () => {
+    mainWindow == null ? void 0 : mainWindow.show();
+  });
+  const port = process.env.VITE_DEV_SERVER_PORT || "5173";
+  if (isDev) {
+    mainWindow.loadURL(`http://localhost:${port}`);
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+  }
+}
+electron.ipcMain.handle("select-folder", async () => {
+  const result = await electron.dialog.showOpenDialog({
+    properties: ["openDirectory"]
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+electron.ipcMain.handle("read-directory", async (_event, dirPath) => {
+  try {
+    const items = fs.readdirSync(dirPath, { withFileTypes: true });
+    const files = items.filter((item) => item.isFile() && item.name.toLowerCase().endsWith(".html")).map((item) => {
+      const filePath = path.join(dirPath, item.name);
+      const stats = fs.statSync(filePath);
+      return {
+        name: item.name,
+        path: filePath,
+        size: stats.size,
+        createdAt: stats.birthtime.toISOString(),
+        updatedAt: stats.mtime.toISOString()
+      };
+    });
+    const folders = items.filter((item) => item.isDirectory());
+    return { files, folders };
+  } catch (error) {
+    console.error("Error reading directory:", error);
+    return { files: [], folders: [] };
+  }
+});
+electron.ipcMain.handle("read-file", async (_event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const titleMatch = content.match(/<title[^>]*>([^<]*)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : "";
+    const descMatch = content.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i);
+    const description = descMatch ? descMatch[1].trim() : "";
+    return { content, title, description };
+  } catch (error) {
+    console.error("Error reading file:", error);
+    return { content: "", title: "", description: "" };
+  }
+});
+electron.ipcMain.handle("save-file", async (_event, filePath, content) => {
+  try {
+    fs.writeFileSync(filePath, content, "utf-8");
+    return { success: true };
+  } catch (error) {
+    console.error("Error saving file:", error);
+    return { success: false, error: String(error) };
+  }
+});
+electron.ipcMain.handle("create-snapshot", async (_event, originalPath, versionsDir) => {
+  try {
+    const fileName = path.basename(originalPath);
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+    const snapshotFileName = `${timestamp}_${fileName}`;
+    if (!fs.existsSync(versionsDir)) {
+      fs.mkdirSync(versionsDir, { recursive: true });
+    }
+    const snapshotPath = path.join(versionsDir, snapshotFileName);
+    fs.copyFileSync(originalPath, snapshotPath);
+    return { success: true, snapshotPath };
+  } catch (error) {
+    console.error("Error creating snapshot:", error);
+    return { success: false, error: String(error) };
+  }
+});
+electron.ipcMain.handle("get-versions", async (_event, versionsDir, fileName) => {
+  try {
+    if (!fs.existsSync(versionsDir)) {
+      return [];
+    }
+    const items = fs.readdirSync(versionsDir, { withFileTypes: true });
+    const versions = items.filter((item) => item.isFile() && item.name.endsWith(`_${fileName}`)).map((item) => {
+      const filePath = path.join(versionsDir, item.name);
+      const stats = fs.statSync(filePath);
+      return {
+        name: item.name,
+        path: filePath,
+        createdAt: stats.birthtime.toISOString()
+      };
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return versions;
+  } catch (error) {
+    console.error("Error getting versions:", error);
+    return [];
+  }
+});
+electron.ipcMain.handle("restore-version", async (_event, versionPath, originalPath) => {
+  try {
+    const content = fs.readFileSync(versionPath);
+    fs.writeFileSync(originalPath, content);
+    return { success: true };
+  } catch (error) {
+    console.error("Error restoring version:", error);
+    return { success: false, error: String(error) };
+  }
+});
+electron.ipcMain.handle("get-all-folders", async (_event, rootPath) => {
+  const folders = [];
+  function scanDir(dirPath, parentPath = "") {
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
+      items.forEach((item) => {
+        if (item.isDirectory()) {
+          const fullPath = path.join(dirPath, item.name);
+          folders.push({
+            name: item.name,
+            path: fullPath,
+            parentPath
+          });
+          scanDir(fullPath, fullPath);
+        }
+      });
+    } catch (error) {
+      console.error("Error scanning directory:", error);
+    }
+  }
+  scanDir(rootPath);
+  return folders;
+});
+electron.ipcMain.handle("open-external", async (_event, url) => {
+  const { shell } = await import("electron");
+  shell.openExternal(url);
+});
+electron.ipcMain.handle("db-get-all-files", async () => {
+  return getAllFiles();
+});
+electron.ipcMain.handle("db-get-file-by-id", async (_event, id) => {
+  return getFileById(id);
+});
+electron.ipcMain.handle("db-insert-file", async (_event, file) => {
+  return insertFile(file);
+});
+electron.ipcMain.handle("db-update-file", async (_event, id, file) => {
+  return updateFile(id, file);
+});
+electron.ipcMain.handle("db-delete-file", async (_event, id) => {
+  return deleteFile(id);
+});
+electron.ipcMain.handle("db-delete-file-by-path", async (_event, filePath) => {
+  return deleteFileByPath(filePath);
+});
+electron.ipcMain.handle("db-get-file-by-path", async (_event, filePath) => {
+  return getFileByPath(filePath);
+});
+electron.ipcMain.handle("db-get-all-folders", async () => {
+  return getAllFolders();
+});
+electron.ipcMain.handle("db-insert-folder", async (_event, folder) => {
+  return insertFolder(folder);
+});
+electron.ipcMain.handle("db-get-folder-by-path", async (_event, folderPath) => {
+  return getFolderByPath(folderPath);
+});
+electron.ipcMain.handle("db-insert-version", async (_event, version) => {
+  return insertVersion(version);
+});
+electron.ipcMain.handle("db-get-versions-by-file-id", async (_event, fileId) => {
+  return getVersionsByFileId(fileId);
+});
+electron.ipcMain.handle("db-delete-versions-by-file-id", async (_event, fileId) => {
+  return deleteVersionsByFileId(fileId);
+});
+electron.ipcMain.handle("db-get-all-tags", async () => {
+  return getAllTags();
+});
+electron.ipcMain.handle("db-insert-tag", async (_event, tag) => {
+  return insertTag(tag);
+});
+electron.ipcMain.handle("db-update-tag", async (_event, id, tag) => {
+  return updateTag(id, tag);
+});
+electron.ipcMain.handle("db-delete-tag", async (_event, id) => {
+  return deleteTag(id);
+});
+electron.ipcMain.handle("db-add-tag-to-file", async (_event, fileId, tagId) => {
+  return addTagToFile(fileId, tagId);
+});
+electron.ipcMain.handle("db-remove-tag-from-file", async (_event, fileId, tagId) => {
+  return removeTagFromFile(fileId, tagId);
+});
+electron.ipcMain.handle("db-get-tags-by-file-id", async (_event, fileId) => {
+  return getTagsByFileId(fileId);
+});
+electron.ipcMain.handle("db-get-files-by-tag-id", async (_event, tagId) => {
+  return getFilesByTagId(tagId);
+});
+electron.ipcMain.handle("db-set-setting", async (_event, key, value) => {
+  setSetting(key, value);
+  return true;
+});
+electron.ipcMain.handle("db-get-setting", async (_event, key) => {
+  return getSetting(key);
+});
+electron.ipcMain.handle("scan-html-files", async (_event, rootPath, recursive = true) => {
+  const htmlFiles = [];
+  function scanDir(dirPath, basePath) {
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item.name);
+        if (item.isFile() && item.name.toLowerCase().endsWith(".html")) {
+          const stats = fs.statSync(fullPath);
+          htmlFiles.push({
+            name: item.name,
+            path: fullPath,
+            relativePath: path.relative(basePath, fullPath),
+            size: stats.size,
+            createdAt: stats.birthtime.toISOString(),
+            updatedAt: stats.mtime.toISOString()
+          });
+        } else if (item.isDirectory() && recursive && item.name !== ".versions" && !item.name.startsWith(".")) {
+          scanDir(fullPath, basePath);
+        }
+      }
+    } catch (error) {
+      console.error("Error scanning directory:", error);
+    }
+  }
+  scanDir(rootPath, rootPath);
+  return htmlFiles;
+});
+electron.ipcMain.handle("copy-file-to-repo", async (_event, sourcePath, destDir) => {
+  try {
+    const fileName = path.basename(sourcePath);
+    const destPath = path.join(destDir, fileName);
+    let finalPath = destPath;
+    if (fs.existsSync(destPath)) {
+      const ext = path.extname(fileName);
+      const base = path.basename(fileName, ext);
+      const timestamp = Date.now();
+      finalPath = path.join(destDir, `${base}_${timestamp}${ext}`);
+    }
+    fs.copyFileSync(sourcePath, finalPath);
+    return { success: true, path: finalPath };
+  } catch (error) {
+    console.error("Error copying file:", error);
+    return { success: false, error: String(error) };
+  }
+});
+electron.ipcMain.handle("select-html-files", async () => {
+  const result = await electron.dialog.showOpenDialog({
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "HTML Files", extensions: ["html", "htm"] }]
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+electron.app.whenReady().then(() => {
+  initDatabase();
+  createWindow();
+  electron.app.on("activate", () => {
+    if (electron.BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+electron.app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    closeDatabase();
+    electron.app.quit();
+  }
+});
+electron.app.on("before-quit", () => {
+  closeDatabase();
+});
