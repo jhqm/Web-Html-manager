@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI HTML Asset Manager - 快速开始</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --sub: #6b7280;
+      --primary: #3b82f6;
+      --primary-weak: #eff6ff;
+      --border: #e5e7eb;
+      --ok: #059669;
+      --warn: #d97706;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      line-height: 1.65;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 36px 20px 60px;
+    }
+
+    .hero {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--primary);
+      background: var(--primary-weak);
+      border: 1px solid #dbeafe;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      line-height: 1.2;
+    }
+
+    .desc {
+      color: var(--sub);
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .toc, .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-top: 16px;
+    }
+
+    .toc h2, .card h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .toc ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .toc a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .toc a:hover { text-decoration: underline; }
+
+    .step {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 12px 0;
+      background: #fff;
+    }
+
+    .step h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .hint {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .hint.ok {
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .hint.warn {
+      background: #fffbeb;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .keys {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .key-item {
+      border: 1px dashed #cbd5e1;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 14px;
+      background: #f8fafc;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+
+    footer {
+      margin-top: 22px;
+      text-align: center;
+      color: var(--sub);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="badge">快速上手 · 约 5~10 分钟</div>
+      <h1>AI HTML Asset Manager《快速开始》</h1>
+      <p class="desc">本指南帮助你从零完成基础配置：定义仓库区、启用自动扫描、设置标签体系，并建立日常使用习惯。</p>
+    </section>
+
+    <section class="toc">
+      <h2>目录</h2>
+      <ul>
+        <li><a href="#s1">1. 定义仓库区（第一步）</a></li>
+        <li><a href="#s2">2. 扫描并导入文件</a></li>
+        <li><a href="#s3">3. 设置自动扫描</a></li>
+        <li><a href="#s4">4. 建立标签体系</a></li>
+        <li><a href="#s5">5. 日常高效使用建议</a></li>
+      </ul>
+    </section>
+
+    <section class="card" id="s1">
+      <h2>1. 定义仓库区（第一步）</h2>
+      <div class="step">
+        <h3><span class="num">1</span>选择本地仓库目录</h3>
+        <p>打开应用后，点击顶部的 <code>选择仓库</code>（或 <code>更换仓库</code>）按钮，指定一个你专门用于存放 HTML 资产的目录。</p>
+        <div class="hint ok">建议：按项目或主题建子目录，例如 <code>工作方案/投放复盘/产品调研</code>。</div>
+      </div>
+      <div class="step">
+        <h3><span class="num">2</span>确认目录结构可持续</h3>
+        <p>仓库目录建议长期不变，后续只在该目录下新增/整理文件，便于自动扫描与历史沉淀。</p>
+      </div>
+    </section>
+
+    <section class="card" id="s2">
+      <h2>2. 扫描并导入文件</h2>
+      <div class="step">
+        <h3><span class="num">1</span>执行首次扫描</h3>
+        <p>点击顶部 <code>扫描</code> 按钮，应用会将仓库中的 HTML 文件导入索引并显示在文件列表。</p>
+      </div>
+      <div class="step">
+        <h3><span class="num">2</span>补充手动添加（可选）</h3>
+        <p>如果有分散在其他目录的文件，可用顶部 <code>添加</code> 按钮补充导入。</p>
+      </div>
+    </section>
+
+    <section class="card" id="s3">
+      <h2>3. 设置自动扫描</h2>
+      <div class="step">
+        <h3><span class="num">1</span>打开设置面板</h3>
+        <p>点击右上角 <code>设置</code> 图标，进入设置抽屉。</p>
+      </div>
+      <div class="step">
+        <h3><span class="num">2</span>启用自动扫描并设置周期</h3>
+        <p>在 <code>自动扫描仓库</code> 中打开开关，设置扫描间隔（例如每 15/30 分钟）。</p>
+        <div class="hint warn">建议初期使用 30 分钟，稳定后再按你工作节奏调整。</div>
+      </div>
+    </section>
+
+    <section class="card" id="s4">
+      <h2>4. 建立标签体系</h2>
+      <div class="step">
+        <h3><span class="num">1</span>先定义“少量高价值标签”</h3>
+        <p>在左侧标签管理区域，先建立 5~10 个核心标签，不要一次建太多。</p>
+        <div class="keys">
+          <div class="key-item"><strong>按用途：</strong>方案、汇报、复盘、Demo</div>
+          <div class="key-item"><strong>按业务：</strong>增长、留存、付费、内容</div>
+          <div class="key-item"><strong>按状态：</strong>草稿、进行中、已定稿</div>
+        </div>
+      </div>
+      <div class="step">
+        <h3><span class="num">2</span>给重点文件打标签</h3>
+        <p>在文件项操作中打开 <code>标签管理</code>，给常用文件标记，后续检索效率会明显提升。</p>
+      </div>
+    </section>
+
+    <section class="card" id="s5">
+      <h2>5. 日常高效使用建议</h2>
+      <div class="step">
+        <h3><span class="num">1</span>每周做一次仓库整理</h3>
+        <p>统一命名风格、清理无效文件、补齐关键标签。</p>
+      </div>
+      <div class="step">
+        <h3><span class="num">2</span>重要改动前创建快照</h3>
+        <p>在版本面板中创建快照，改动后可快速回滚，降低试错成本。</p>
+      </div>
+      <div class="step">
+        <h3><span class="num">3</span>优化阅读工作区</h3>
+        <p>可拖动“文件列表栏”宽度，让列表与预览区域更符合你的阅读习惯。</p>
+      </div>
+    </section>
+
+    <footer>
+      现在你已经完成基础设置，可以开始稳定沉淀你的 AI HTML 资产库。
+    </footer>
+  </div>
+</body>
+</html>

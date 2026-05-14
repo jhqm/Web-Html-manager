@@ -9,6 +9,15 @@
     "dist/**/*",
     "dist-electron/**/*"
   ],
+  "extraResources": [
+    {
+      "from": "resources/templates",
+      "to": "templates",
+      "filter": [
+        "**/*"
+      ]
+    }
+  ],
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg"]

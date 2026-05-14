@@ -35,6 +35,85 @@ function createWindow() {
   }
 }
 
+const DEFAULT_REPO_DIR_NAME = 'DefaultRepo'
+const QUICK_START_FILE_NAME = '快速开始.html'
+
+function getQuickStartTemplatePath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'templates', QUICK_START_FILE_NAME)
+  }
+  return path.join(app.getAppPath(), 'resources', 'templates', QUICK_START_FILE_NAME)
+}
+
+function extractMetaFromHtml(content: string): { title: string; description: string } {
+  const titleMatch = content.match(/<title[^>]*>([^<]*)<\/title>/i)
+  const descMatch = content.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i)
+  return {
+    title: titleMatch ? titleMatch[1].trim() : '',
+    description: descMatch ? descMatch[1].trim() : ''
+  }
+}
+
+function getFallbackQuickStartContent(): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>快速开始</title>
+    <meta name="description" content="欢迎使用 AI HTML Manager，开始管理你的 HTML 资产。" />
+  </head>
+  <body>
+    <main style="max-width:800px;margin:40px auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.7;">
+      <h1>欢迎使用 AI HTML Manager</h1>
+      <p>这是系统为你准备的默认文件，你可以直接编辑、另存和管理更多 HTML 资产。</p>
+    </main>
+  </body>
+</html>`
+}
+
+async function seedDefaultRepoOnFirstRun(): Promise<void> {
+  try {
+    const currentRepoPath = getSetting('repoPath')
+    if (currentRepoPath) return
+
+    const defaultRepoPath = path.join(app.getPath('userData'), DEFAULT_REPO_DIR_NAME)
+    fs.mkdirSync(defaultRepoPath, { recursive: true })
+
+    const quickStartFilePath = path.join(defaultRepoPath, QUICK_START_FILE_NAME)
+    if (!fs.existsSync(quickStartFilePath)) {
+      const templatePath = getQuickStartTemplatePath()
+      if (fs.existsSync(templatePath)) {
+        fs.copyFileSync(templatePath, quickStartFilePath)
+      } else {
+        fs.writeFileSync(quickStartFilePath, getFallbackQuickStartContent(), 'utf-8')
+      }
+    }
+
+    const fileStat = fs.statSync(quickStartFilePath)
+    const fileContent = fs.readFileSync(quickStartFilePath, 'utf-8')
+    const { title, description } = extractMetaFromHtml(fileContent)
+
+    const existingRecord = getFileByPath(quickStartFilePath)
+    if (!existingRecord) {
+      insertFile({
+        name: QUICK_START_FILE_NAME,
+        path: quickStartFilePath,
+        title,
+        description,
+        size: fileStat.size,
+        created_at: fileStat.birthtime.toISOString(),
+        updated_at: fileStat.mtime.toISOString(),
+        folder_id: null
+      })
+    }
+
+    setSetting('repoPath', defaultRepoPath)
+  } catch (error) {
+    console.error('[Bootstrap] Failed to seed default repo:', error)
+  }
+}
+
 // IPC: 选择文件夹
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog({
@@ -454,10 +533,11 @@ ipcMain.handle('select-html-files', async () => {
   return result.canceled ? [] : result.filePaths
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 初始化数据库
   initDatabase()
-  
+  await seedDefaultRepoOnFirstRun()
+
   createWindow()
 
   app.on('activate', () => {
