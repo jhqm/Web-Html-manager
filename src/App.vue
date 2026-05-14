@@ -369,6 +369,15 @@
           <el-form-item label="版本快照">
             <el-switch v-model="autoSnapshot" active-text="自动创建快照" />
           </el-form-item>
+
+          <el-form-item label="自动扫描仓库">
+            <el-switch v-model="autoScanEnabled" active-text="启用" inactive-text="关闭" />
+            <div v-if="autoScanEnabled" class="auto-scan-row">
+              <span>每</span>
+              <el-input-number v-model="autoScanIntervalMinutes" :min="1" :max="1440" :step="1" controls-position="right" />
+              <span>分钟自动扫描一次</span>
+            </div>
+          </el-form-item>
         </el-form>
         
         <el-divider />
@@ -408,10 +417,14 @@ const showDeleteDialog = ref(false)
 const deleting = ref(false)
 const showSettings = ref(false)
 const autoSnapshot = ref(true)
+const autoScanEnabled = ref(false)
+const autoScanIntervalMinutes = ref(30)
+let autoScanTimer: number | null = null
+const autoScanSettingsLoaded = ref(false)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-B9D15'
+const buildTag = 'BUILD-B9D17'
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -494,6 +507,7 @@ watch(
   { immediate: true }
 )
 onBeforeUnmount(() => {
+  clearAutoScanTimer()
   if (viewportRO) {
     viewportRO.disconnect()
     viewportRO = null
@@ -687,6 +701,56 @@ const showRenameDialog = ref(false)
 const renameBaseName = ref('')
 const renameExt = ref('.html')
 const renaming = ref(false)
+
+function clearAutoScanTimer() {
+  if (autoScanTimer !== null) {
+    window.clearInterval(autoScanTimer)
+    autoScanTimer = null
+  }
+}
+
+function setupAutoScanTimer() {
+  clearAutoScanTimer()
+  if (!autoScanSettingsLoaded.value) return
+  if (!autoScanEnabled.value) return
+  if (!fileStore.repoPath) return
+
+  const minutes = Math.max(1, Math.floor(Number(autoScanIntervalMinutes.value) || 30))
+  const ms = minutes * 60 * 1000
+
+  autoScanTimer = window.setInterval(async () => {
+    if (!fileStore.repoPath) return
+    if (scanner.scanning.value) return
+    await scanner.autoScan(true)
+  }, ms)
+}
+
+async function loadAutoScanSettings() {
+  try {
+    const enabled = await window.electronAPI.dbGetSetting('autoScanEnabled')
+    const interval = await window.electronAPI.dbGetSetting('autoScanIntervalMinutes')
+
+    autoScanEnabled.value = enabled === '1'
+
+    const parsed = Number(interval)
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      autoScanIntervalMinutes.value = Math.floor(parsed)
+    }
+  } catch (error) {
+    console.error('[Settings] Failed to load auto scan settings:', error)
+  } finally {
+    autoScanSettingsLoaded.value = true
+  }
+}
+
+async function persistAutoScanSettings() {
+  try {
+    await window.electronAPI.dbSetSetting('autoScanEnabled', autoScanEnabled.value ? '1' : '0')
+    await window.electronAPI.dbSetSetting('autoScanIntervalMinutes', String(autoScanIntervalMinutes.value))
+  } catch (error) {
+    console.error('[Settings] Failed to save auto scan settings:', error)
+  }
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -1071,9 +1135,29 @@ async function handleSwipePin(file: any) {
   swipedFileId.value = null
 }
 
+
+watch(
+  [autoScanEnabled, autoScanIntervalMinutes],
+  async () => {
+    if (!autoScanSettingsLoaded.value) return
+    autoScanIntervalMinutes.value = Math.max(1, Math.floor(Number(autoScanIntervalMinutes.value) || 1))
+    await persistAutoScanSettings()
+    setupAutoScanTimer()
+  }
+)
+
+watch(
+  () => fileStore.repoPath,
+  () => {
+    setupAutoScanTimer()
+  }
+)
+
 onMounted(async () => {
   await fileStore.init()
   await tagStore.init()
+  await loadAutoScanSettings()
+  setupAutoScanTimer()
 })
 </script>
 
@@ -1261,4 +1345,17 @@ onMounted(async () => {
 .settings-content { padding: 0 16px; }
 .about-section { margin-top: 20px; }
 .about-section h4 { margin-bottom: 8px; }
+
+.auto-scan-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #606266;
+}
+
+.auto-scan-row .el-input-number {
+  width: 120px;
+  flex-shrink: 0;
+}
 </style>

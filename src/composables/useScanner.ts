@@ -70,9 +70,9 @@ export function useScanner() {
   }
 
   // 自动扫描仓库目录
-  async function autoScan(): Promise<{ imported: number; skipped: number }> {
+  async function autoScan(silent: boolean = false): Promise<{ imported: number; skipped: number }> {
     if (!fileStore.repoPath) {
-      ElMessage.warning('请先选择仓库目录')
+      if (!silent) ElMessage.warning('请先选择仓库目录')
       return { imported: 0, skipped: 0 }
     }
 
@@ -85,7 +85,7 @@ export function useScanner() {
       scanProgress.value.total = files.length
 
       if (files.length === 0) {
-        ElMessage.info('未找到 HTML 文件')
+        if (!silent) ElMessage.info('未找到 HTML 文件')
         return { imported: 0, skipped: 0 }
       }
 
@@ -95,15 +95,21 @@ export function useScanner() {
       // 刷新文件列表
       await fileStore.loadFiles()
 
-      if (result.imported > 0) {
-        ElMessage.success(`导入完成：新增 ${result.imported} 个文件`)
-      } else {
-        ElMessage.info('所有文件已是最新')
+      if (!silent) {
+        if (result.imported > 0) {
+          ElMessage.success(`导入完成：新增 ${result.imported} 个文件`)
+        } else {
+          ElMessage.info('所有文件已是最新')
+        }
       }
 
       return result
     } catch (error) {
-      ElMessage.error('扫描失败: ' + String(error))
+      if (!silent) {
+        ElMessage.error('扫描失败: ' + String(error))
+      } else {
+        console.error('[Scanner] Auto scan failed:', error)
+      }
       return { imported: 0, skipped: 0 }
     } finally {
       scanning.value = false
