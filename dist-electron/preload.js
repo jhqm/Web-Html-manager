@@ -19,6 +19,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   getAllFolders: (rootPath) => electron.ipcRenderer.invoke("get-all-folders", rootPath),
   // 打开外部浏览器
   openExternal: (url) => electron.ipcRenderer.invoke("open-external", url),
+  // 在系统文件管理器中定位文件
+  showItemInFolder: (filePath) => electron.ipcRenderer.invoke("show-item-in-folder", filePath),
   // 重命名磁盘文件（同时迁移同名版本快照）
   renameFile: (oldPath, newBaseName, versionsDir) => electron.ipcRenderer.invoke("rename-file", oldPath, newBaseName, versionsDir),
   // ============ 数据库操作 ============

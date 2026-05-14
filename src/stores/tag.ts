@@ -12,6 +12,11 @@ export const useTagStore = defineStore('tag', () => {
   const tags = ref<TagRecord[]>([])
   const selectedTagId = ref<number | null>(null)
   const loading = ref(false)
+  const tagLinksVersion = ref(0)
+
+  function bumpTagLinksVersion(): void {
+    tagLinksVersion.value += 1
+  }
 
   // 从数据库加载所有标签
   async function loadTags(): Promise<void> {
@@ -59,12 +64,19 @@ export const useTagStore = defineStore('tag', () => {
   // 删除标签
   async function removeTag(id: number): Promise<boolean> {
     try {
+      // 显式解绑该标签与所有文件的关系，确保删除后文件不再保留该标签
+      const fileIds = await getTagFileIds(id)
+      for (const fileId of fileIds) {
+        await removeTagFromFile(fileId, id)
+      }
+
       const result = await window.electronAPI.dbDeleteTag(id)
       if (result) {
         // 如果删除的是选中的标签，清空选中
         if (selectedTagId.value === id) {
           selectedTagId.value = null
         }
+        bumpTagLinksVersion()
         await loadTags()
       }
       return result
@@ -77,7 +89,9 @@ export const useTagStore = defineStore('tag', () => {
   // 为文件添加标签
   async function addTagToFile(fileId: number, tagId: number): Promise<boolean> {
     try {
-      return await window.electronAPI.dbAddTagToFile(fileId, tagId)
+      const ok = await window.electronAPI.dbAddTagToFile(fileId, tagId)
+      if (ok) bumpTagLinksVersion()
+      return ok
     } catch (error) {
       console.error('[TagStore] Failed to add tag to file:', error)
       return false
@@ -87,7 +101,9 @@ export const useTagStore = defineStore('tag', () => {
   // 从文件移除标签
   async function removeTagFromFile(fileId: number, tagId: number): Promise<boolean> {
     try {
-      return await window.electronAPI.dbRemoveTagFromFile(fileId, tagId)
+      const ok = await window.electronAPI.dbRemoveTagFromFile(fileId, tagId)
+      if (ok) bumpTagLinksVersion()
+      return ok
     } catch (error) {
       console.error('[TagStore] Failed to remove tag from file:', error)
       return false
@@ -142,6 +158,7 @@ export const useTagStore = defineStore('tag', () => {
         await removeTagFromFile(fileId, tagId)
       }
 
+      bumpTagLinksVersion()
       return true
     } catch (error) {
       console.error('[TagStore] Failed to set file tags:', error)
@@ -164,6 +181,7 @@ export const useTagStore = defineStore('tag', () => {
     tags,
     selectedTagId,
     loading,
+    tagLinksVersion,
 
     // 方法
     loadTags,

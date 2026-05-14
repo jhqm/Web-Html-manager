@@ -195,6 +195,13 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   shell.openExternal(url)
 })
 
+// IPC: 在系统文件管理器中定位文件
+ipcMain.handle('show-item-in-folder', async (_event, filePath: string) => {
+  const { shell } = await import('electron')
+  shell.showItemInFolder(filePath)
+  return true
+})
+
 // IPC: 重命名磁盘文件（同时迁移版本快照）
 // payload: { oldPath, newBaseName, versionsDir? }
 //  - newBaseName: 不带扩展名的新文件名（如 "my-page"）；若包含扩展名则原样使用

@@ -137,6 +137,9 @@
                       <el-dropdown-item :command="'rename:' + file.id">
                         <el-icon><Edit /></el-icon> 重命名
                       </el-dropdown-item>
+                      <el-dropdown-item :command="'openPath:' + file.id">
+                        <el-icon><FolderOpened /></el-icon> 打开目标路径
+                      </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -408,7 +411,7 @@ const autoSnapshot = ref(true)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-B9D4'
+const buildTag = 'BUILD-B9D15'
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -800,6 +803,30 @@ async function openExternal() {
   await window.electronAPI.openExternal('file://' + fileStore.currentFile.path)
 }
 
+function getParentDir(filePath: string): string {
+  const normalized = filePath.replace(/\\+/g, '/').replace(/\/+$/, '')
+  const idx = normalized.lastIndexOf('/')
+  return idx > 0 ? normalized.slice(0, idx) : normalized
+}
+
+async function openTargetPath(file: any) {
+  if (!file?.path) {
+    ElMessage.warning('文件路径无效')
+    return
+  }
+  const api: any = window.electronAPI
+  try {
+    if (typeof api?.showItemInFolder === 'function') {
+      await api.showItemInFolder(file.path)
+      return
+    }
+    const dir = getParentDir(file.path)
+    await window.electronAPI.openExternal('file://' + dir)
+  } catch {
+    ElMessage.error('打开目标路径失败')
+  }
+}
+
 function toggleFullscreen() {
   if (!previewFrame.value) return
   if (document.fullscreenElement) {
@@ -837,6 +864,9 @@ async function handleFileCommand(command: string, file: any) {
       showRenameDialog.value = true
       break
     }
+    case 'openPath':
+      await openTargetPath(file)
+      break
   }
 }
 

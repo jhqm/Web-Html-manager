@@ -501,6 +501,11 @@ electron.ipcMain.handle("open-external", async (_event, url) => {
   const { shell } = await import("electron");
   shell.openExternal(url);
 });
+electron.ipcMain.handle("show-item-in-folder", async (_event, filePath) => {
+  const { shell } = await import("electron");
+  shell.showItemInFolder(filePath);
+  return true;
+});
 electron.ipcMain.handle("rename-file", async (_event, oldPath, newBaseName, versionsDir) => {
   try {
     if (!fs.existsSync(oldPath)) {

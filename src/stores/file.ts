@@ -350,6 +350,12 @@ export const useFileStore = defineStore('file', () => {
     taggedFileIdsMap.value.set(tagId, fileIds)
   }
 
+
+  // 清空标签文件映射（用于重建映射，避免删除标签后残留）
+  function clearTaggedFileIdsMap(): void {
+    taggedFileIdsMap.value = new Map()
+  }
+
   // 同步获取文件标签ID数组（用于UI多选）
   function getFileTags(fileId: number): number[] {
     return [] // 需要从tagStore异步获取，这里返回空
@@ -399,6 +405,7 @@ export const useFileStore = defineStore('file', () => {
     togglePin,
     setTagFilter,
     updateTaggedFileIds,
+    clearTaggedFileIdsMap,
     init
   }
 })
