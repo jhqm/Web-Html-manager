@@ -131,15 +131,25 @@ async function refreshTagCounts() {
   try {
     const results = await syncTagFilterMapFromStore()
 
+    // 切仓后“当前视图”的文件集合（fileStore.files 已按 repoPath 过滤）。
+    // 标签计数必须与该集合相交，否则会把其它仓库下也带同标签的文件算进来。
+    const visibleFileIds = new Set(fileStore.files.map(f => f.id))
+
     const nextMap: Record<number, number> = {}
-    const tagged = new Set<number>()
+    const taggedInView = new Set<number>()
     for (const r of results) {
-      nextMap[r.id] = r.fileIds.length
-      r.fileIds.forEach(id => tagged.add(id))
+      let count = 0
+      for (const id of r.fileIds) {
+        if (visibleFileIds.has(id)) {
+          count++
+          taggedInView.add(id)
+        }
+      }
+      nextMap[r.id] = count
     }
 
     tagFileCountMap.value = nextMap
-    untaggedCount.value = fileStore.files.filter(f => !tagged.has(f.id)).length
+    untaggedCount.value = fileStore.files.filter(f => !taggedInView.has(f.id)).length
   } catch {
     tagFileCountMap.value = {}
     untaggedCount.value = 0

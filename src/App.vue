@@ -404,7 +404,7 @@ const autoScanSettingsLoaded = ref(false)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-109A'
+const buildTag = 'BUILD-110A'
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
