@@ -73,7 +73,7 @@
       </div>
       
       <!-- 中间：文件列表 -->
-      <div class="file-list-container">
+      <div class="file-list-container" :style="{ width: `${fileListWidth}px` }">
         <div class="file-list-header">
           <span style="font-weight: 500;">文件列表 ({{ fileStore.filteredFiles.length }})</span>
           <div style="display: flex; gap: 8px;">
@@ -159,6 +159,14 @@
           </el-button>
         </div>
       </div>
+
+      <div
+        class="file-list-resizer"
+        :class="{ 'is-resizing': isResizingFileList }"
+        title="拖动调整文件列表宽度"
+        @mousedown="startResizeFileList"
+        @touchstart.prevent="startResizeFileListTouch"
+      ></div>
       
       <!-- 右侧：预览面板 -->
       <div class="preview-container">
@@ -424,7 +432,7 @@ const autoScanSettingsLoaded = ref(false)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-B9D17'
+const buildTag = 'BUILD-B9D18'
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -508,6 +516,7 @@ watch(
 )
 onBeforeUnmount(() => {
   clearAutoScanTimer()
+  stopResizeFileList()
   if (viewportRO) {
     viewportRO.disconnect()
     viewportRO = null
@@ -678,6 +687,77 @@ function onViewportPointerUp(e: PointerEvent) {
 
 // 侧边栏折叠状态
 const sidebarCollapsed = ref(false)
+
+const FILE_LIST_WIDTH_KEY = 'fileListWidth'
+const FILE_LIST_MIN_WIDTH = 260
+const FILE_LIST_MAX_WIDTH = 720
+const fileListWidth = ref(400)
+const isResizingFileList = ref(false)
+let fileListResizeStartX = 0
+let fileListResizeStartWidth = 400
+
+function clampFileListWidth(width: number): number {
+  return Math.min(FILE_LIST_MAX_WIDTH, Math.max(FILE_LIST_MIN_WIDTH, Math.round(width)))
+}
+
+function applyFileListWidth(nextWidth: number) {
+  const normalized = clampFileListWidth(nextWidth)
+  fileListWidth.value = normalized
+  try { localStorage.setItem(FILE_LIST_WIDTH_KEY, String(normalized)) } catch {}
+}
+
+function onFileListResizeMove(clientX: number) {
+  const delta = clientX - fileListResizeStartX
+  applyFileListWidth(fileListResizeStartWidth + delta)
+}
+
+function onFileListResizeMouseMove(e: MouseEvent) {
+  if (!isResizingFileList.value) return
+  onFileListResizeMove(e.clientX)
+}
+
+function onFileListResizeTouchMove(e: TouchEvent) {
+  if (!isResizingFileList.value) return
+  const touch = e.touches[0]
+  if (!touch) return
+  onFileListResizeMove(touch.clientX)
+  if (e.cancelable) e.preventDefault()
+}
+
+function stopResizeFileList() {
+  if (!isResizingFileList.value) return
+  isResizingFileList.value = false
+  document.removeEventListener('mousemove', onFileListResizeMouseMove)
+  document.removeEventListener('mouseup', stopResizeFileList)
+  document.removeEventListener('touchmove', onFileListResizeTouchMove)
+  document.removeEventListener('touchend', stopResizeFileList)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+function startResizeFileList(e: MouseEvent) {
+  if (e.button !== 0) return
+  isResizingFileList.value = true
+  fileListResizeStartX = e.clientX
+  fileListResizeStartWidth = fileListWidth.value
+  document.addEventListener('mousemove', onFileListResizeMouseMove)
+  document.addEventListener('mouseup', stopResizeFileList)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  if (e.cancelable) e.preventDefault()
+}
+
+function startResizeFileListTouch(e: TouchEvent) {
+  const touch = e.touches[0]
+  if (!touch) return
+  isResizingFileList.value = true
+  fileListResizeStartX = touch.clientX
+  fileListResizeStartWidth = fileListWidth.value
+  document.addEventListener('touchmove', onFileListResizeTouchMove, { passive: false })
+  document.addEventListener('touchend', stopResizeFileList)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
 
 // 当前打开下拉菜单的文件ID
 const openDropdownId = ref<number | null>(null)
@@ -1154,6 +1234,13 @@ watch(
 )
 
 onMounted(async () => {
+  try {
+    const savedWidth = Number(localStorage.getItem(FILE_LIST_WIDTH_KEY))
+    if (!Number.isNaN(savedWidth) && savedWidth > 0) {
+      fileListWidth.value = clampFileListWidth(savedWidth)
+    }
+  } catch {}
+
   await fileStore.init()
   await tagStore.init()
   await loadAutoScanSettings()
@@ -1208,6 +1295,25 @@ onMounted(async () => {
 
 .sidebar-content-inner {
   padding: 0 8px;
+}
+
+.file-list-container {
+  flex-shrink: 0;
+}
+
+.file-list-resizer {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  border-left: 1px solid #e4e7ed;
+  transition: background 0.2s ease;
+}
+
+.file-list-resizer:hover,
+.file-list-resizer.is-resizing {
+  background: #ecf5ff;
 }
 
 .sidebar-section { border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
