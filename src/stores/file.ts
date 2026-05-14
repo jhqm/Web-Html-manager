@@ -99,11 +99,20 @@ export const useFileStore = defineStore('file', () => {
     return [...pinned, ...unpinned]
   })
 
-  // 从数据库加载所有文件
+  // 从数据库加载文件
+  //
+  // 设计意图（路径身份视图）：
+  // - 当 repoPath 已设置时，只加载"路径在当前仓库下"的文件；
+  // - 切到其他仓库后，原仓库的文件、标签关联、版本等数据不会被删除，
+  //   切回原仓库依然可见，做到"切换是视图切换，不是数据销毁"。
+  // - 当 repoPath 为空（极少见的初始态）时，退化为加载全部文件，避免空白。
+  // 同时确保 currentFile 不会停留在"已不属于当前仓库"的旧文件上。
   async function loadFiles(): Promise<void> {
     loading.value = true
     try {
-      const dbFiles = await window.electronAPI.dbGetAllFiles()
+      const dbFiles = repoPath.value
+        ? await window.electronAPI.dbGetFilesByRepoPath(repoPath.value)
+        : await window.electronAPI.dbGetAllFiles()
       files.value = dbFiles.map(f => ({
         id: f.id,
         name: f.name,
@@ -116,6 +125,11 @@ export const useFileStore = defineStore('file', () => {
         folder_id: f.folder_id,
         is_pinned: f.is_pinned || 0
       }))
+
+      // 若当前选中文件已不在新视图集合中（例如刚切换仓库），收敛为 null
+      if (currentFile.value && !files.value.some(f => f.id === currentFile.value!.id)) {
+        currentFile.value = null
+      }
     } catch (error) {
       console.error('[FileStore] Failed to load files:', error)
     } finally {

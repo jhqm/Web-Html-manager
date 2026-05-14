@@ -1,6 +1,6 @@
 <template>
   <!--
-    预览内核（重构版 v3 / BUILD-107A）
+    预览内核（重构版 v3 / BUILD-108A）
     设计原则：
       1) 统一加载协议：通过 app://preview/<path> 加载，dev/prod 行为一致
       2) 零侵入：绝不读写 iframe.contentDocument，绝不注入 CSS / 监听 DOM

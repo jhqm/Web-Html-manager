@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { pathToFileURL } from 'url'
-import { initDatabase, closeDatabase, getAllFiles, getFileByPath, insertFile, updateFile, deleteFile, deleteFileByPath, getAllFolders, insertFolder, getFolderByPath, insertVersion, getVersionsByFileId, deleteVersionsByFileId, updateVersionPath, getAllTags, insertTag, updateTag, deleteTag, addTagToFile, removeTagFromFile, getTagsByFileId, getFilesByTagId, setSetting, getSetting, getFileById } from './database'
+import { initDatabase, closeDatabase, getAllFiles, getFilesByRepoPath, getFileByPath, insertFile, updateFile, deleteFile, deleteFileByPath, getAllFolders, insertFolder, getFolderByPath, insertVersion, getVersionsByFileId, deleteVersionsByFileId, updateVersionPath, getAllTags, insertTag, updateTag, deleteTag, addTagToFile, removeTagFromFile, getTagsByFileId, getFilesByTagId, setSetting, getSetting, getFileById } from './database'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -383,6 +383,13 @@ ipcMain.handle('rename-file', async (
 // 文件相关
 ipcMain.handle('db-get-all-files', async () => {
   return getAllFiles()
+})
+
+// 按仓库根路径前缀获取文件（用于"路径身份"视图过滤）
+// 入参为空字符串/未提供时退化为返回全部，保持向后兼容
+ipcMain.handle('db-get-files-by-repo-path', async (_event, repoPath: string) => {
+  if (!repoPath) return getAllFiles()
+  return getFilesByRepoPath(repoPath)
 })
 
 ipcMain.handle('db-get-file-by-id', async (_event, id: number) => {

@@ -374,7 +374,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { Search, Folder, FolderAdd, Refresh, Setting, FolderOpened, Document, TopRight, FullScreen, Camera, Fold, CaretTop, Delete, Upload, ArrowLeft, ArrowRight, More, Star, StarFilled, PriceTag, Edit, ZoomIn, Plus, Minus } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useFileStore } from './stores/file'
 import { useTagStore } from './stores/tag'
 import { useVersionStore } from './stores/version'
@@ -404,7 +404,7 @@ const autoScanSettingsLoaded = ref(false)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-107A'
+const buildTag = 'BUILD-109A'
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -595,15 +595,53 @@ function formatSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+// 切换仓库
+//
+// 设计意图：
+// - 视图层"按路径身份"展示：切到新仓库后，列表只显示该路径下的文件；
+//   原仓库的文件、标签关联、版本、置顶等数据"保留在数据库中"，
+//   切回原仓库后会再次出现，不存在数据丢失。
+// - 切换可能让用户瞬间看到列表清空/集合大变，这在心智上接近"危险动作"，
+//   因此切换前增加显式确认；首次选择仓库（repoPath 尚未设置）则跳过确认。
 async function handleSelectFolder() {
-  const path = await window.electronAPI.selectFolder()
-  if (path) {
-    fileStore.setRepoPath(path)
-    await window.electronAPI.dbSetSetting('repoPath', path)
-    await fileStore.loadFiles()
-    await fileStore.loadFolders()
-    await scanner.autoScan()
+  // 仅在已存在仓库且用户主动更换时弹确认（首次选择无需打扰）
+  if (fileStore.repoPath) {
+    try {
+      await ElMessageBox.confirm(
+        `更换仓库后，当前列表将只显示新仓库路径下的文件。\n` +
+          `原仓库下的文件及其标签、版本、置顶等数据会从当前列表中隐藏（不会被删除），切回原仓库后仍可见。\n\n` +
+          `是否继续？`,
+        '更换仓库确认',
+        {
+          confirmButtonText: '继续更换',
+          cancelButtonText: '取消',
+          type: 'warning',
+          distinguishCancelAndClose: true
+        }
+      )
+    } catch {
+      return
+    }
   }
+
+  const path = await window.electronAPI.selectFolder()
+  if (!path) return
+
+  // 用户选了相同路径：无需走清理与确认副作用，但仍执行一次扫描以刷新元数据
+  if (path === fileStore.repoPath) {
+    await scanner.autoScan()
+    return
+  }
+
+  fileStore.setRepoPath(path)
+  await window.electronAPI.dbSetSetting('repoPath', path)
+  // loadFiles 内部会按 repoPath 过滤，并自动收敛 currentFile
+  await fileStore.loadFiles()
+  await fileStore.loadFolders()
+  // 切仓后标签关联未变，但"当前视图下的文件集合"已变，需要刷新计数。
+  // 借助 tagLinksVersion 自增触发 TagManager 内的 refreshTagCounts。
+  tagStore.tagLinksVersion += 1
+  await scanner.autoScan()
 }
 
 async function changeRepoPath() {

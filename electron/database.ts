@@ -230,6 +230,43 @@ export function getAllFiles(): FileRecord[] {
   return stmt.all() as FileRecord[]
 }
 
+/**
+ * 按仓库根路径前缀查询文件。
+ *
+ * 设计意图：
+ * - 切换仓库时，只在视图层面"按路径身份"展示当前仓库下的文件；
+ * - 原仓库的记录（含标签关联、版本、置顶等）保留在库中，切换回原仓库后可恢复显示；
+ * - 通过 SQL 前缀过滤一次性命中，避免在渲染进程做大集合差集，减少抖动与卡顿。
+ *
+ * 前缀匹配规则：
+ * - 完全等于 repoPath（理论上仓库本身不可能是 .html，但兜底保留）
+ * - 以 repoPath + 路径分隔符开头（例如 "/repoA/" / "/repoA\\"），
+ *   防止 "/repo" 错误命中 "/repository/x.html"。
+ *
+ * 安全转义：
+ * - LIKE 中的 %、_、\ 需要转义；这里使用 ESCAPE '\' 显式声明转义符。
+ */
+export function getFilesByRepoPath(repoPath: string): FileRecord[] {
+  const database = getDatabase()
+  if (!repoPath) return []
+
+  const normalized = repoPath.replace(/[\\/]+$/, '')
+  // 转义 LIKE 通配符（顺序：先转义 \，再 % 与 _）
+  const escapeLike = (s: string) => s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+  const escaped = escapeLike(normalized)
+  const likePosix = `${escaped}/%`
+  const likeWin = `${escaped}\\%`
+
+  const stmt = database.prepare(
+    `SELECT * FROM files
+     WHERE path = ?
+        OR path LIKE ? ESCAPE '\\'
+        OR path LIKE ? ESCAPE '\\'
+     ORDER BY updated_at DESC`
+  )
+  return stmt.all(normalized, likePosix, likeWin) as FileRecord[]
+}
+
 export function getFilesByFolder(folderId: number | null): FileRecord[] {
   const database = getDatabase()
   const stmt = database.prepare('SELECT * FROM files WHERE folder_id = ? ORDER BY updated_at DESC')

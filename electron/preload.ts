@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 文件相关
   dbGetAllFiles: () => ipcRenderer.invoke('db-get-all-files'),
+  dbGetFilesByRepoPath: (repoPath: string) => ipcRenderer.invoke('db-get-files-by-repo-path', repoPath),
   dbGetFileById: (id: number) => ipcRenderer.invoke('db-get-file-by-id', id),
   dbInsertFile: (file: { name: string; path: string; title?: string; description?: string; size?: number; created_at?: string; updated_at?: string; folder_id?: number | null }) => 
     ipcRenderer.invoke('db-insert-file', file),
@@ -132,6 +133,18 @@ declare global {
       
       // 数据库操作
       dbGetAllFiles: () => Promise<Array<{
+        id: number
+        name: string
+        path: string
+        title: string
+        description: string
+        size: number
+        created_at: string
+        updated_at: string
+        folder_id: number | null
+        is_pinned: number
+      }>>
+      dbGetFilesByRepoPath: (repoPath: string) => Promise<Array<{
         id: number
         name: string
         path: string
