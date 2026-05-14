@@ -2,7 +2,7 @@
   <div id="app">
     <!-- 顶部工具栏 -->
     <div class="tool-bar">
-      <div class="tool-bar-logo">📄 AI HTML Manager <span class="build-tag">{{ buildTag }}</span></div>
+      <div class="tool-bar-logo">📄 AI HTML Manager <span class="build-tag" :data-build-tag="buildTag">{{ buildTag }}</span></div>
       
       <div class="tool-bar-search">
         <el-input
@@ -231,19 +231,23 @@
             class="preview-stage"
             :style="{
               width: scaledStageSize.w ? `${scaledStageSize.w}px` : '100%',
-              height: scaledStageSize.h ? `${scaledStageSize.h}px` : '100%'
+              height: scaledStageSize.h ? `${scaledStageSize.h}px` : '100%',
+              minWidth: viewportSize.w ? `${viewportSize.w}px` : '100%',
+              minHeight: viewportSize.h ? `${viewportSize.h}px` : '100%'
             }"
           >
             <iframe
               ref="previewFrame"
-              :src="'file://' + fileStore.currentFile.path"
+              :src="currentPreviewSrc"
               class="preview-iframe"
               @load="onIframeLoad"
               :style="{
-                width: stageSize.w ? `${stageSize.w}px` : '100%',
-                height: stageSize.h ? `${stageSize.h}px` : '100%',
+                width: iframeBoxSize.w ? `${iframeBoxSize.w}px` : '100%',
+                height: iframeBoxSize.h ? `${iframeBoxSize.h}px` : '100%',
                 transform: `scale(${previewZoom})`,
-                transformOrigin: 'top left'
+                transformOrigin: 'top left',
+                willChange: 'transform',
+                backfaceVisibility: 'hidden'
               }"
             ></iframe>
             <!-- 缩放 ≠ 100% 时覆盖在 iframe 上，接管光标与拖拽（避免 iframe 截获事件） -->
@@ -393,7 +397,7 @@
         <div class="about-section">
           <h4>关于</h4>
           <p>AI HTML Asset Manager</p>
-          <p style="color: #909399; font-size: 12px;">版本 1.0.0</p>
+          <p style="color: #909399; font-size: 12px;">版本 1.0.4</p>
         </div>
       </div>
     </el-drawer>
@@ -432,7 +436,18 @@ const autoScanSettingsLoaded = ref(false)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-B9D20'
+const buildTag = 'BUILD-104A'
+
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\+/g, '/')
+  if (/^[A-Za-z]:\//.test(normalized)) return encodeURI(`file:///${normalized}`)
+  if (normalized.startsWith('/')) return encodeURI(`file://${normalized}`)
+  return encodeURI(`file:///${normalized}`)
+}
+
+const currentPreviewSrc = computed(() => (
+  fileStore.currentFile?.path ? toFileUrl(fileStore.currentFile.path) : 'about:blank'
+))
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -456,10 +471,12 @@ const isPanning = ref(false)
 const panStart = ref({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
 // 缩放后舞台实际占位：使用 max(viewport, content * zoom)
 // 注意：不能写成 max(viewport, content) * zoom，否则 zoom<1 会把 viewport 也缩小，形成右下假留白
+// 缩放后舞台实际占位：使用 max(viewport, content * zoom)
+// 注意：不能写成 max(viewport, content) * zoom，否则 zoom<1 会把 viewport 也缩小，形成右下假留白
 const scaledStageSize = computed(() => ({
   w: Math.max(
     viewportSize.value.w,
-    Math.max(1, Math.ceil(iframeContentSize.value.w * previewZoom.value))
+    Math.max(1, Math.ceil(stageSize.value.w * previewZoom.value))
   ),
   h: Math.max(
     viewportSize.value.h,
@@ -477,26 +494,41 @@ const canPan = computed(() => (
 // 这样可以避免嵌套百分比在 flex 容器中解析失败的问题
 const viewportSize = ref({ w: 0, h: 0 })
 let viewportRO: ResizeObserver | null = null
+let viewportSyncRaf = 0
+let viewportSyncTimer: number | null = null
+
+function syncViewportSize() {
+  const el = previewViewport.value
+  if (!el) return
+  viewportSize.value = { w: Math.max(1, el.clientWidth), h: Math.max(1, el.clientHeight) }
+}
+function scheduleViewportSync(delay = 0) {
+  if (viewportSyncRaf) { cancelAnimationFrame(viewportSyncRaf); viewportSyncRaf = 0 }
+  if (viewportSyncTimer !== null) { window.clearTimeout(viewportSyncTimer); viewportSyncTimer = null }
+  const run = () => { viewportSyncRaf = requestAnimationFrame(() => { syncViewportSize(); viewportSyncRaf = 0 }) }
+  if (delay > 0) { viewportSyncTimer = window.setTimeout(() => { viewportSyncTimer = null; run() }, delay); return }
+  run()
+}
 function attachViewportObserver() {
   const el = previewViewport.value
   if (!el) return
-  viewportSize.value = { w: el.clientWidth, h: el.clientHeight }
+  syncViewportSize()
   if (viewportRO) viewportRO.disconnect()
-  viewportRO = new ResizeObserver(() => {
-    if (!previewViewport.value) return
-    viewportSize.value = {
-      w: previewViewport.value.clientWidth,
-      h: previewViewport.value.clientHeight
-    }
-  })
+  viewportRO = new ResizeObserver(() => syncViewportSize())
   viewportRO.observe(el)
 }
+function detachViewportObserver() { if (viewportRO) { viewportRO.disconnect(); viewportRO = null } }
+function handleWindowResize() { scheduleViewportSync(0); scheduleViewportSync(150) }
+function handleVisibilityChange() { if (document.visibilityState === 'visible') { scheduleViewportSync(0); scheduleViewportSync(200) } }
 // currentFile 出现 / 切换时（previewViewport 才会渲染），重新挂 observer
 watch(
   () => fileStore.currentFile?.id,
   async () => {
     await nextTick()
     attachViewportObserver()
+    scheduleViewportSync(0)
+    scheduleViewportSync(120)
+    scheduleViewportSync(400)
     // 切文件时先重置上一份内容尺寸，避免旧文件高度残留
     iframeContentSize.value = { w: 0, h: 0 }
     if (iframeContentRO) {
@@ -517,10 +549,11 @@ watch(
 onBeforeUnmount(() => {
   clearAutoScanTimer()
   stopResizeFileList()
-  if (viewportRO) {
-    viewportRO.disconnect()
-    viewportRO = null
-  }
+  detachViewportObserver()
+  if (viewportSyncRaf) { cancelAnimationFrame(viewportSyncRaf); viewportSyncRaf = 0 }
+  if (viewportSyncTimer !== null) { window.clearTimeout(viewportSyncTimer); viewportSyncTimer = null }
+  window.removeEventListener('resize', handleWindowResize)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (iframeContentRO) {
     iframeContentRO.disconnect()
     iframeContentRO = null
@@ -545,10 +578,19 @@ let iframeMeasureTimer: number | null = null
 // stage / iframe 实际使用的尺寸：取 viewport 与 iframe 内容 的较大值
 // - 内容比 viewport 高 → iframe 撑成内容高度，外层滚动
 // - 内容比 viewport 矮 → iframe 用 viewport 尺寸，避免留白
+// stage 用于撑出滚动空间（缩放后），允许内容比 viewport 大
 const stageSize = computed(() => ({
-  w: Math.max(viewportSize.value.w, iframeContentSize.value.w),
-  h: Math.max(viewportSize.value.h, iframeContentSize.value.h)
+  w: Math.max(1, viewportSize.value.w, iframeContentSize.value.w),
+  h: Math.max(1, viewportSize.value.h, iframeContentSize.value.h)
 }))
+
+// iframe 自身尺寸：宽度永远等于 viewport（保证页面始终自适应布局），
+// 仅高度允许跟随内容增长，避免 iframe 内置纵向滚动条吞掉缩放后的滚动空间
+const iframeBoxSize = computed(() => ({
+  w: Math.max(1, viewportSize.value.w),
+  h: Math.max(1, viewportSize.value.h, iframeContentSize.value.h)
+}))
+
 function measureIframeContent() {
   const ifr = previewFrame.value
   if (!ifr) return
@@ -623,30 +665,78 @@ function onIframeLoad() {
     iframeMeasureTimer = null
   }
 
-  // 加载后立即测一次 + 延后再测一次（覆盖图片/字体异步布局）
+  // 仅做"立即测一次 + 下一帧再测一次"，后续完全交给 ResizeObserver/MutationObserver
+  // 不再使用多个延时点测量，避免 iframe 在 prod 下 1s 后被内容 scrollWidth 撑大
   measureIframeContent()
-  requestAnimationFrame(() => measureIframeContent())
-  iframeMeasureTimer = window.setTimeout(() => {
-    measureIframeContent()
-    iframeMeasureTimer = null
-  }, 150)
+  scheduleViewportSync(0)
+  requestAnimationFrame(() => { measureIframeContent(); scheduleViewportSync(60) })
 
   // 监听尺寸与 DOM 结构变化
   try {
     const doc = previewFrame.value?.contentDocument
     if (!doc || !doc.documentElement) return
 
-    iframeContentRO = new ResizeObserver(() => measureIframeContent())
+    // ★ prod 兜底 1：注入文档级 CSS，避免 iframe 内部脚本/样式在 1s 后改成"原尺寸"
+    //   通过 !important 强制 html/body 跟随 iframe 视口宽度
+    try {
+      const styleId = '__preview_fit_style__'
+      let styleEl = doc.getElementById(styleId) as HTMLStyleElement | null
+      if (!styleEl) {
+        styleEl = doc.createElement('style')
+        styleEl.id = styleId
+        styleEl.textContent = `
+          html, body {
+            box-sizing: border-box !important;
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+          }
+          html { width: 100% !important; }
+          body { width: 100% !important; margin: 0 !important; }
+        `
+        ;(doc.head || doc.documentElement).appendChild(styleEl)
+      }
+    } catch {}
+
+    // ★ prod 兜底 2：擦除 documentElement/body 上 inline 写死的 width 属性
+    //   监听属性变化，一旦被脚本改回"原尺寸"，立即清掉
+    const cleanInlineWidth = () => {
+      try {
+        const el = doc.documentElement as HTMLElement | null
+        const bd = doc.body as HTMLElement | null
+        if (el && el.style && el.style.width) el.style.width = ''
+        if (bd && bd.style && bd.style.width) bd.style.width = ''
+      } catch {}
+    }
+    cleanInlineWidth()
+
+    iframeContentRO = new ResizeObserver(() => { measureIframeContent(); scheduleViewportSync(0) })
     iframeContentRO.observe(doc.documentElement)
     if (doc.body) iframeContentRO.observe(doc.body)
 
-    iframeMutationObserver = new MutationObserver(() => measureIframeContent())
+    iframeMutationObserver = new MutationObserver((records) => {
+      // 任意属性变化都先擦一次 inline width，再做尺寸测量
+      for (const r of records) {
+        if (r.type === 'attributes' && (r.attributeName === 'style' || r.attributeName === 'width')) {
+          cleanInlineWidth()
+          break
+        }
+      }
+      measureIframeContent()
+      scheduleViewportSync(0)
+    })
     iframeMutationObserver.observe(doc.documentElement, {
       childList: true,
       subtree: true,
       attributes: true,
+      attributeFilter: ['style', 'width', 'class'],
       characterData: false
     })
+    if (doc.body) {
+      iframeMutationObserver.observe(doc.body, {
+        attributes: true,
+        attributeFilter: ['style', 'width', 'class']
+      })
+    }
   } catch {}
 }
 
@@ -894,7 +984,7 @@ async function createSnapshotIfNeeded() {
 function previewVersion(version: { id: number; version_path: string }) {
   if (previewFrame.value) {
     previewingVersionId.value = version.id
-    previewFrame.value.src = 'file://' + version.version_path
+    previewFrame.value.src = toFileUrl(version.version_path)
   }
 }
 
@@ -912,7 +1002,7 @@ async function confirmRestore() {
     if (result.success) {
       ElMessage.success('版本恢复成功')
       showRestoreDialog.value = false
-      if (previewFrame.value) previewFrame.value.src = 'file://' + fileStore.currentFile.path
+      if (previewFrame.value) previewFrame.value.src = toFileUrl(fileStore.currentFile.path)
       await fileStore.loadFiles()
     } else {
       ElMessage.error('版本恢复失败')
@@ -944,7 +1034,7 @@ async function confirmDelete() {
 
 async function openExternal() {
   if (!fileStore.currentFile) return
-  await window.electronAPI.openExternal('file://' + fileStore.currentFile.path)
+  await window.electronAPI.openExternal(toFileUrl(fileStore.currentFile.path))
 }
 
 function getParentDir(filePath: string): string {
@@ -965,7 +1055,7 @@ async function openTargetPath(file: any) {
       return
     }
     const dir = getParentDir(file.path)
-    await window.electronAPI.openExternal('file://' + dir)
+    await window.electronAPI.openExternal(toFileUrl(dir))
   } catch {
     ElMessage.error('打开目标路径失败')
   }
@@ -1051,7 +1141,7 @@ async function handleRenameSubmit() {
 
     // 若是当前预览的文件，刷新 iframe 指向新路径
     if (wasCurrent && previewFrame.value && fileStore.currentFile) {
-      previewFrame.value.src = 'file://' + fileStore.currentFile.path
+      previewFrame.value.src = toFileUrl(fileStore.currentFile.path)
     }
     // 重新加载该文件的版本列表（version_path 已迁移）
     if (wasCurrent) {
@@ -1233,6 +1323,11 @@ watch(
   }
 )
 
+watch(previewZoom, () => {
+  scheduleViewportSync(0)
+  scheduleViewportSync(80)
+})
+
 onMounted(async () => {
   try {
     const savedWidth = Number(localStorage.getItem(FILE_LIST_WIDTH_KEY))
@@ -1245,10 +1340,42 @@ onMounted(async () => {
   await tagStore.init()
   await loadAutoScanSettings()
   setupAutoScanTimer()
+
+  window.addEventListener('resize', handleWindowResize, { passive: true })
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+
+  await nextTick()
+  attachViewportObserver()
+  scheduleViewportSync(0)
+  scheduleViewportSync(120)
+  scheduleViewportSync(500)
 })
 </script>
 
 <style scoped>
+/* 预览关键容器：在 scoped 中固化，避免构建后样式顺序波动 */
+.preview-container,
+.preview-content,
+.preview-stage {
+  min-width: 0;
+  min-height: 0;
+}
+
+.preview-content {
+  position: relative;
+  overflow: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.preview-stage {
+  position: relative;
+}
+
+.preview-iframe {
+  display: block;
+  border: none;
+}
 /* 侧边栏折叠样式 */
 .sidebar {
   position: relative;
