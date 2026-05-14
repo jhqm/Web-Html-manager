@@ -223,45 +223,12 @@
         <div
           class="preview-content"
           v-if="fileStore.currentFile"
-          ref="previewViewport"
-          :class="{ 'is-panning': isPanning, 'can-pan': canPan }"
         >
-          <!-- stage 占据缩放后的真实像素尺寸，撑出滚动空间；iframe 用 viewport 尺寸 + transform: scale 视觉缩放 -->
-          <div
-            class="preview-stage"
-            :style="{
-              width: scaledStageSize.w ? `${scaledStageSize.w}px` : '100%',
-              height: scaledStageSize.h ? `${scaledStageSize.h}px` : '100%',
-              minWidth: viewportSize.w ? `${viewportSize.w}px` : '100%',
-              minHeight: viewportSize.h ? `${viewportSize.h}px` : '100%'
-            }"
-          >
-            <iframe
-              ref="previewFrame"
-              :src="currentPreviewSrc"
-              class="preview-iframe"
-              @load="onIframeLoad"
-              :style="{
-                width: iframeBoxSize.w ? `${iframeBoxSize.w}px` : '100%',
-                height: iframeBoxSize.h ? `${iframeBoxSize.h}px` : '100%',
-                transform: `scale(${previewZoom})`,
-                transformOrigin: 'top left',
-                willChange: 'transform',
-                backfaceVisibility: 'hidden'
-              }"
-            ></iframe>
-            <!-- 缩放 ≠ 100% 时覆盖在 iframe 上，接管光标与拖拽（避免 iframe 截获事件） -->
-            <div
-              v-if="previewZoom !== 1"
-              class="pan-overlay"
-              :class="{ 'is-panning': isPanning }"
-              @pointerdown="onViewportPointerDown"
-              @pointermove="onViewportPointerMove"
-              @pointerup="onViewportPointerUp"
-              @pointercancel="onViewportPointerUp"
-              @pointerleave="onViewportPointerUp"
-            ></div>
-          </div>
+          <PreviewPane
+            ref="previewPaneRef"
+            :file-path="fileStore.currentFile.path"
+            :zoom="previewZoom"
+          />
         </div>
         
         <div class="preview-empty" v-else>
@@ -405,7 +372,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { Search, Folder, FolderAdd, Refresh, Setting, FolderOpened, Document, TopRight, FullScreen, Camera, Fold, CaretTop, Delete, Upload, ArrowLeft, ArrowRight, More, Star, StarFilled, PriceTag, Edit, ZoomIn, Plus, Minus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useFileStore } from './stores/file'
@@ -413,13 +380,14 @@ import { useTagStore } from './stores/tag'
 import { useVersionStore } from './stores/version'
 import { useScanner } from './composables/useScanner'
 import TagManager from './components/TagManager.vue'
+import PreviewPane from './components/PreviewPane.vue'
 
 const fileStore = useFileStore()
 const tagStore = useTagStore()
 const versionStore = useVersionStore()
 const scanner = useScanner()
 
-const previewFrame = ref<HTMLIFrameElement | null>(null)
+const previewPaneRef = ref<InstanceType<typeof PreviewPane> | null>(null)
 const showVersionPanel = ref(false)
 const previewingVersionId = ref<number | null>(null)
 const showRestoreDialog = ref(false)
@@ -436,18 +404,7 @@ const autoScanSettingsLoaded = ref(false)
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-104A'
-
-function toFileUrl(filePath: string): string {
-  const normalized = filePath.replace(/\\+/g, '/')
-  if (/^[A-Za-z]:\//.test(normalized)) return encodeURI(`file:///${normalized}`)
-  if (normalized.startsWith('/')) return encodeURI(`file://${normalized}`)
-  return encodeURI(`file:///${normalized}`)
-}
-
-const currentPreviewSrc = computed(() => (
-  fileStore.currentFile?.path ? toFileUrl(fileStore.currentFile.path) : 'about:blank'
-))
+const buildTag = 'BUILD-107A'
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -465,316 +422,21 @@ const previewZoomPct = computed<number>({
   set: (v: number) => setZoom(v / 100)
 })
 
-// 预览拖动平移：当缩放后内容溢出 viewport 时，按住鼠标即可拖动调整可见位置
-const previewViewport = ref<HTMLDivElement | null>(null)
-const isPanning = ref(false)
-const panStart = ref({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
-// 缩放后舞台实际占位：使用 max(viewport, content * zoom)
-// 注意：不能写成 max(viewport, content) * zoom，否则 zoom<1 会把 viewport 也缩小，形成右下假留白
-// 缩放后舞台实际占位：使用 max(viewport, content * zoom)
-// 注意：不能写成 max(viewport, content) * zoom，否则 zoom<1 会把 viewport 也缩小，形成右下假留白
-const scaledStageSize = computed(() => ({
-  w: Math.max(
-    viewportSize.value.w,
-    Math.max(1, Math.ceil(stageSize.value.w * previewZoom.value))
-  ),
-  h: Math.max(
-    viewportSize.value.h,
-    Math.max(1, Math.ceil(iframeContentSize.value.h * previewZoom.value))
-  )
-}))
+// 预览相关：所有缩放/拖拽/尺寸测量已下沉到 PreviewPane.vue
+// App.vue 仅维护 previewZoom 状态并透传给子组件。
 
-// 仅当 viewport 存在可滚动空间时，才显示"可拖拽"光标
-const canPan = computed(() => (
-  scaledStageSize.value.w > viewportSize.value.w + 1 ||
-  scaledStageSize.value.h > viewportSize.value.h + 1
-))
-
-// 跟踪 .preview-content 的实际像素尺寸，用于精确计算 stage / iframe 大小
-// 这样可以避免嵌套百分比在 flex 容器中解析失败的问题
-const viewportSize = ref({ w: 0, h: 0 })
-let viewportRO: ResizeObserver | null = null
-let viewportSyncRaf = 0
-let viewportSyncTimer: number | null = null
-
-function syncViewportSize() {
-  const el = previewViewport.value
-  if (!el) return
-  viewportSize.value = { w: Math.max(1, el.clientWidth), h: Math.max(1, el.clientHeight) }
-}
-function scheduleViewportSync(delay = 0) {
-  if (viewportSyncRaf) { cancelAnimationFrame(viewportSyncRaf); viewportSyncRaf = 0 }
-  if (viewportSyncTimer !== null) { window.clearTimeout(viewportSyncTimer); viewportSyncTimer = null }
-  const run = () => { viewportSyncRaf = requestAnimationFrame(() => { syncViewportSize(); viewportSyncRaf = 0 }) }
-  if (delay > 0) { viewportSyncTimer = window.setTimeout(() => { viewportSyncTimer = null; run() }, delay); return }
-  run()
-}
-function attachViewportObserver() {
-  const el = previewViewport.value
-  if (!el) return
-  syncViewportSize()
-  if (viewportRO) viewportRO.disconnect()
-  viewportRO = new ResizeObserver(() => syncViewportSize())
-  viewportRO.observe(el)
-}
-function detachViewportObserver() { if (viewportRO) { viewportRO.disconnect(); viewportRO = null } }
-function handleWindowResize() { scheduleViewportSync(0); scheduleViewportSync(150) }
-function handleVisibilityChange() { if (document.visibilityState === 'visible') { scheduleViewportSync(0); scheduleViewportSync(200) } }
-// currentFile 出现 / 切换时（previewViewport 才会渲染），重新挂 observer
+// 切换文件时如果有需要做的副作用（例如重置版本预览高亮），在此处理
 watch(
   () => fileStore.currentFile?.id,
-  async () => {
-    await nextTick()
-    attachViewportObserver()
-    scheduleViewportSync(0)
-    scheduleViewportSync(120)
-    scheduleViewportSync(400)
-    // 切文件时先重置上一份内容尺寸，避免旧文件高度残留
-    iframeContentSize.value = { w: 0, h: 0 }
-    if (iframeContentRO) {
-      iframeContentRO.disconnect()
-      iframeContentRO = null
-    }
-    if (iframeMutationObserver) {
-      iframeMutationObserver.disconnect()
-      iframeMutationObserver = null
-    }
-    if (iframeMeasureTimer !== null) {
-      window.clearTimeout(iframeMeasureTimer)
-      iframeMeasureTimer = null
-    }
-  },
-  { immediate: true }
+  () => {
+    previewingVersionId.value = null
+  }
 )
+
 onBeforeUnmount(() => {
   clearAutoScanTimer()
   stopResizeFileList()
-  detachViewportObserver()
-  if (viewportSyncRaf) { cancelAnimationFrame(viewportSyncRaf); viewportSyncRaf = 0 }
-  if (viewportSyncTimer !== null) { window.clearTimeout(viewportSyncTimer); viewportSyncTimer = null }
-  window.removeEventListener('resize', handleWindowResize)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  if (iframeContentRO) {
-    iframeContentRO.disconnect()
-    iframeContentRO = null
-  }
-  if (iframeMutationObserver) {
-    iframeMutationObserver.disconnect()
-    iframeMutationObserver = null
-  }
-  if (iframeMeasureTimer !== null) {
-    window.clearTimeout(iframeMeasureTimer)
-    iframeMeasureTimer = null
-  }
 })
-
-// iframe 内容真实尺寸：iframe 加载后读 contentDocument 的 scrollWidth/Height
-// 用于让 iframe 元素自身高度等于内容高度（避免内置滚动条吃掉缩放后的滚动）
-const iframeContentSize = ref({ w: 0, h: 0 })
-let iframeContentRO: ResizeObserver | null = null
-let iframeMutationObserver: MutationObserver | null = null
-let iframeMeasureTimer: number | null = null
-
-// stage / iframe 实际使用的尺寸：取 viewport 与 iframe 内容 的较大值
-// - 内容比 viewport 高 → iframe 撑成内容高度，外层滚动
-// - 内容比 viewport 矮 → iframe 用 viewport 尺寸，避免留白
-// stage 用于撑出滚动空间（缩放后），允许内容比 viewport 大
-const stageSize = computed(() => ({
-  w: Math.max(1, viewportSize.value.w, iframeContentSize.value.w),
-  h: Math.max(1, viewportSize.value.h, iframeContentSize.value.h)
-}))
-
-// iframe 自身尺寸：宽度永远等于 viewport（保证页面始终自适应布局），
-// 仅高度允许跟随内容增长，避免 iframe 内置纵向滚动条吞掉缩放后的滚动空间
-const iframeBoxSize = computed(() => ({
-  w: Math.max(1, viewportSize.value.w),
-  h: Math.max(1, viewportSize.value.h, iframeContentSize.value.h)
-}))
-
-function measureIframeContent() {
-  const ifr = previewFrame.value
-  if (!ifr) return
-  try {
-    const doc = ifr.contentDocument
-    if (!doc || !doc.documentElement) return
-
-    const root = doc.documentElement as HTMLElement
-    const body = doc.body as HTMLElement | null
-    const scrollingEl = doc.scrollingElement as HTMLElement | null
-
-    // 1) 文档级尺寸（常规页面）
-    let maxW = Math.max(
-      root.scrollWidth,
-      root.clientWidth,
-      root.offsetWidth,
-      body ? body.scrollWidth : 0,
-      body ? body.clientWidth : 0,
-      body ? body.offsetWidth : 0,
-      scrollingEl ? scrollingEl.scrollWidth : 0,
-      scrollingEl ? scrollingEl.clientWidth : 0,
-      scrollingEl ? scrollingEl.offsetWidth : 0
-    )
-    let maxH = Math.max(
-      root.scrollHeight,
-      root.clientHeight,
-      root.offsetHeight,
-      body ? body.scrollHeight : 0,
-      body ? body.clientHeight : 0,
-      body ? body.offsetHeight : 0,
-      scrollingEl ? scrollingEl.scrollHeight : 0,
-      scrollingEl ? scrollingEl.clientHeight : 0,
-      scrollingEl ? scrollingEl.offsetHeight : 0
-    )
-
-    // 2) 内部滚动容器补偿：覆盖 body 不滚、子容器滚动的页面
-    if (body) {
-      const rootRect = root.getBoundingClientRect()
-      const nodes = body.querySelectorAll<HTMLElement>('*')
-      for (const el of nodes) {
-        if (el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1) continue
-        const rect = el.getBoundingClientRect()
-        const left = Math.max(0, rect.left - rootRect.left)
-        const top = Math.max(0, rect.top - rootRect.top)
-        const contentW = Math.max(el.scrollWidth, Math.ceil(rect.width))
-        const contentH = Math.max(el.scrollHeight, Math.ceil(rect.height))
-        maxW = Math.max(maxW, Math.ceil(left + contentW))
-        maxH = Math.max(maxH, Math.ceil(top + contentH))
-      }
-    }
-
-    iframeContentSize.value = {
-      w: Math.max(1, Math.ceil(maxW)),
-      h: Math.max(1, Math.ceil(maxH))
-    }
-  } catch {
-    // 跨域等无法访问的情况：保持 0，回退到 viewportSize
-    iframeContentSize.value = { w: 0, h: 0 }
-  }
-}
-function onIframeLoad() {
-  if (iframeContentRO) {
-    iframeContentRO.disconnect()
-    iframeContentRO = null
-  }
-  if (iframeMutationObserver) {
-    iframeMutationObserver.disconnect()
-    iframeMutationObserver = null
-  }
-  if (iframeMeasureTimer !== null) {
-    window.clearTimeout(iframeMeasureTimer)
-    iframeMeasureTimer = null
-  }
-
-  // 仅做"立即测一次 + 下一帧再测一次"，后续完全交给 ResizeObserver/MutationObserver
-  // 不再使用多个延时点测量，避免 iframe 在 prod 下 1s 后被内容 scrollWidth 撑大
-  measureIframeContent()
-  scheduleViewportSync(0)
-  requestAnimationFrame(() => { measureIframeContent(); scheduleViewportSync(60) })
-
-  // 监听尺寸与 DOM 结构变化
-  try {
-    const doc = previewFrame.value?.contentDocument
-    if (!doc || !doc.documentElement) return
-
-    // ★ prod 兜底 1：注入文档级 CSS，避免 iframe 内部脚本/样式在 1s 后改成"原尺寸"
-    //   通过 !important 强制 html/body 跟随 iframe 视口宽度
-    try {
-      const styleId = '__preview_fit_style__'
-      let styleEl = doc.getElementById(styleId) as HTMLStyleElement | null
-      if (!styleEl) {
-        styleEl = doc.createElement('style')
-        styleEl.id = styleId
-        styleEl.textContent = `
-          html, body {
-            box-sizing: border-box !important;
-            max-width: 100% !important;
-            overflow-x: hidden !important;
-          }
-          html { width: 100% !important; }
-          body { width: 100% !important; margin: 0 !important; }
-        `
-        ;(doc.head || doc.documentElement).appendChild(styleEl)
-      }
-    } catch {}
-
-    // ★ prod 兜底 2：擦除 documentElement/body 上 inline 写死的 width 属性
-    //   监听属性变化，一旦被脚本改回"原尺寸"，立即清掉
-    const cleanInlineWidth = () => {
-      try {
-        const el = doc.documentElement as HTMLElement | null
-        const bd = doc.body as HTMLElement | null
-        if (el && el.style && el.style.width) el.style.width = ''
-        if (bd && bd.style && bd.style.width) bd.style.width = ''
-      } catch {}
-    }
-    cleanInlineWidth()
-
-    iframeContentRO = new ResizeObserver(() => { measureIframeContent(); scheduleViewportSync(0) })
-    iframeContentRO.observe(doc.documentElement)
-    if (doc.body) iframeContentRO.observe(doc.body)
-
-    iframeMutationObserver = new MutationObserver((records) => {
-      // 任意属性变化都先擦一次 inline width，再做尺寸测量
-      for (const r of records) {
-        if (r.type === 'attributes' && (r.attributeName === 'style' || r.attributeName === 'width')) {
-          cleanInlineWidth()
-          break
-        }
-      }
-      measureIframeContent()
-      scheduleViewportSync(0)
-    })
-    iframeMutationObserver.observe(doc.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['style', 'width', 'class'],
-      characterData: false
-    })
-    if (doc.body) {
-      iframeMutationObserver.observe(doc.body, {
-        attributes: true,
-        attributeFilter: ['style', 'width', 'class']
-      })
-    }
-  } catch {}
-}
-
-function onViewportPointerDown(e: PointerEvent) {
-  const el = previewViewport.value
-  if (!el) return
-  // 仅在内容溢出时才进入拖拽模式（缩放 100% 以下也允许中键拖拽）
-  const overflowX = el.scrollWidth > el.clientWidth + 1
-  const overflowY = el.scrollHeight > el.clientHeight + 1
-  if (!overflowX && !overflowY && e.button !== 1) return
-  // 仅响应主键（左键）和中键
-  if (e.button !== 0 && e.button !== 1) return
-  isPanning.value = true
-  panStart.value = {
-    x: e.clientX,
-    y: e.clientY,
-    scrollLeft: el.scrollLeft,
-    scrollTop: el.scrollTop
-  }
-  try { (e.target as HTMLElement).setPointerCapture?.(e.pointerId) } catch {}
-  e.preventDefault()
-}
-
-function onViewportPointerMove(e: PointerEvent) {
-  if (!isPanning.value) return
-  const el = previewViewport.value
-  if (!el) return
-  el.scrollLeft = panStart.value.scrollLeft - (e.clientX - panStart.value.x)
-  el.scrollTop = panStart.value.scrollTop - (e.clientY - panStart.value.y)
-}
-
-function onViewportPointerUp(e: PointerEvent) {
-  if (!isPanning.value) return
-  isPanning.value = false
-  try { (e.target as HTMLElement).releasePointerCapture?.(e.pointerId) } catch {}
-}
-
-
 // 侧边栏折叠状态
 const sidebarCollapsed = ref(false)
 
@@ -982,9 +644,11 @@ async function createSnapshotIfNeeded() {
 }
 
 function previewVersion(version: { id: number; version_path: string }) {
-  if (previewFrame.value) {
+  // 版本预览：用直接修改 iframe.src 的方式临时展示（不污染当前文件状态）
+  const frame = previewPaneRef.value?.getFrameEl()
+  if (frame) {
     previewingVersionId.value = version.id
-    previewFrame.value.src = toFileUrl(version.version_path)
+    frame.src = toExternalFileUrl(version.version_path)
   }
 }
 
@@ -1002,7 +666,8 @@ async function confirmRestore() {
     if (result.success) {
       ElMessage.success('版本恢复成功')
       showRestoreDialog.value = false
-      if (previewFrame.value) previewFrame.value.src = toFileUrl(fileStore.currentFile.path)
+      // 当前文件被覆盖，强制 PreviewPane 重新加载（保持 src 不变也能刷新）
+      previewPaneRef.value?.reload()
       await fileStore.loadFiles()
     } else {
       ElMessage.error('版本恢复失败')
@@ -1023,7 +688,7 @@ async function confirmDelete() {
     if (success) {
       ElMessage.success('文件已删除')
       showDeleteDialog.value = false
-      if (previewFrame.value) previewFrame.value.src = 'about:blank'
+      // 删除后 currentFile 变 null，PreviewPane 会自动渲染 about:blank
     } else {
       ElMessage.error('文件删除失败')
     }
@@ -1032,9 +697,17 @@ async function confirmDelete() {
   }
 }
 
+// 仅供"在外部浏览器打开"使用：app:// 协议只在主窗口内有效，外部浏览器需要 file://
+function toExternalFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\+/g, '/')
+  if (/^[A-Za-z]:\//.test(normalized)) return encodeURI(`file:///${normalized}`)
+  if (normalized.startsWith('/')) return encodeURI(`file://${normalized}`)
+  return encodeURI(`file:///${normalized}`)
+}
+
 async function openExternal() {
   if (!fileStore.currentFile) return
-  await window.electronAPI.openExternal(toFileUrl(fileStore.currentFile.path))
+  await window.electronAPI.openExternal(toExternalFileUrl(fileStore.currentFile.path))
 }
 
 function getParentDir(filePath: string): string {
@@ -1055,18 +728,19 @@ async function openTargetPath(file: any) {
       return
     }
     const dir = getParentDir(file.path)
-    await window.electronAPI.openExternal(toFileUrl(dir))
+    await window.electronAPI.openExternal(toExternalFileUrl(dir))
   } catch {
     ElMessage.error('打开目标路径失败')
   }
 }
 
 function toggleFullscreen() {
-  if (!previewFrame.value) return
+  const frame = previewPaneRef.value?.getFrameEl()
+  if (!frame) return
   if (document.fullscreenElement) {
     document.exitFullscreen()
   } else {
-    previewFrame.value.requestFullscreen()
+    frame.requestFullscreen()
   }
 }
 
@@ -1139,10 +813,8 @@ async function handleRenameSubmit() {
     ElMessage.success('重命名成功')
     showRenameDialog.value = false
 
-    // 若是当前预览的文件，刷新 iframe 指向新路径
-    if (wasCurrent && previewFrame.value && fileStore.currentFile) {
-      previewFrame.value.src = toFileUrl(fileStore.currentFile.path)
-    }
+    // 若是当前预览的文件，PreviewPane 会随 fileStore.currentFile.path 自动更新 src，
+    // 但因为路径字符串变了，Vue 已驱动新的 src 计算，无需手动赋值。
     // 重新加载该文件的版本列表（version_path 已迁移）
     if (wasCurrent) {
       await versionStore.loadVersions(fileId)
@@ -1323,11 +995,6 @@ watch(
   }
 )
 
-watch(previewZoom, () => {
-  scheduleViewportSync(0)
-  scheduleViewportSync(80)
-})
-
 onMounted(async () => {
   try {
     const savedWidth = Number(localStorage.getItem(FILE_LIST_WIDTH_KEY))
@@ -1340,42 +1007,10 @@ onMounted(async () => {
   await tagStore.init()
   await loadAutoScanSettings()
   setupAutoScanTimer()
-
-  window.addEventListener('resize', handleWindowResize, { passive: true })
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-
-  await nextTick()
-  attachViewportObserver()
-  scheduleViewportSync(0)
-  scheduleViewportSync(120)
-  scheduleViewportSync(500)
 })
 </script>
 
 <style scoped>
-/* 预览关键容器：在 scoped 中固化，避免构建后样式顺序波动 */
-.preview-container,
-.preview-content,
-.preview-stage {
-  min-width: 0;
-  min-height: 0;
-}
-
-.preview-content {
-  position: relative;
-  overflow: auto;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.preview-stage {
-  position: relative;
-}
-
-.preview-iframe {
-  display: block;
-  border: none;
-}
 /* 侧边栏折叠样式 */
 .sidebar {
   position: relative;

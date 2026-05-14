@@ -1,9 +1,31 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { pathToFileURL } from 'url'
 import { initDatabase, closeDatabase, getAllFiles, getFileByPath, insertFile, updateFile, deleteFile, deleteFileByPath, getAllFolders, insertFolder, getFolderByPath, insertVersion, getVersionsByFileId, deleteVersionsByFileId, updateVersionPath, getAllTags, insertTag, updateTag, deleteTag, addTagToFile, removeTagFromFile, getTagsByFileId, getFilesByTagId, setSetting, getSetting, getFileById } from './database'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+
+// ============================================================
+// 自定义协议 app://preview/<encoded-absolute-path>
+// 目的：dev/prod 共用同一条加载管线，消除 file:// 协议在打包后
+//      行为差异（baseURL、相对路径、CSP 等）带来的不一致问题。
+// ------------------------------------------------------------
+// 注册顺序要求：registerSchemesAsPrivileged 必须在 app ready 之前调用。
+// ============================================================
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      bypassCSP: true,
+      corsEnabled: true
+    }
+  }
+])
 
 let mainWindow: BrowserWindow | null = null
 
@@ -537,6 +559,40 @@ app.whenReady().then(async () => {
   // 初始化数据库
   initDatabase()
   await seedDefaultRepoOnFirstRun()
+
+  // ----------------------------------------------------------
+  // 注册 app:// 协议处理器
+  // URL 形式：app://preview/<encoded-absolute-path>
+  //   - hostname 必须为 "preview"
+  //   - pathname 是 URI 编码后的绝对路径（含跨平台前导斜杠）
+  // ----------------------------------------------------------
+  protocol.handle('app', async (req) => {
+    try {
+      const url = new URL(req.url)
+      if (url.hostname !== 'preview') {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      // 还原绝对路径：URL.pathname 在 standard scheme 下会带前导 "/"
+      // Windows 例子：app://preview/C%3A/foo/bar.html → /C:/foo/bar.html → C:/foo/bar.html
+      // POSIX  例子：app://preview/Users/foo/bar.html → /Users/foo/bar.html
+      let rawPath = decodeURIComponent(url.pathname || '')
+      if (process.platform === 'win32' && /^\/[A-Za-z]:\//.test(rawPath)) {
+        rawPath = rawPath.slice(1)
+      }
+
+      if (!rawPath || !fs.existsSync(rawPath)) {
+        return new Response('File Not Found', { status: 404 })
+      }
+
+      // 直接将本地文件以 file:// 形式交给 net.fetch，由 Electron 处理范围请求/MIME。
+      const fileUrl = pathToFileURL(rawPath).toString()
+      return await net.fetch(fileUrl)
+    } catch (err) {
+      console.error('[protocol:app] handle error:', err)
+      return new Response('Internal Error', { status: 500 })
+    }
+  })
 
   createWindow()
 
