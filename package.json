@@ -1,6 +1,6 @@
 {
   "name": "web-html-manager",
-  "version": "1.0.6",
+  "version": "1.0.10-dev.ee351c5.dirty",
   "description": "个人AI生成HTML资产管理器",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -8,9 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "sync:version": "node scripts/sync-version.js",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "electron:dev": "vite --config vite.config.ts",
-    "electron:build": "npm run sync:version && vite build && electron-builder",
-    "package": "npm run sync:version && vite build && electron-builder --dir"
+    "electron:build": "npm run rebuild && npm run sync:version && vite build && electron-builder",
+    "package": "npm run rebuild && npm run sync:version && vite build && electron-builder --dir"
   },
   "keywords": [
     "html",

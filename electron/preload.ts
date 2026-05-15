@@ -79,8 +79,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 设置相关
   dbSetSetting: (key: string, value: string) => ipcRenderer.invoke('db-set-setting', key, value),
   dbGetSetting: (key: string) => ipcRenderer.invoke('db-get-setting', key),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   
   // 文件扫描
+
   scanHtmlFiles: (rootPath: string, recursive?: boolean) => 
     ipcRenderer.invoke('scan-html-files', rootPath, recursive),
   copyFileToRepo: (sourcePath: string, destDir: string) => 
@@ -240,8 +242,10 @@ declare global {
       
       dbSetSetting: (key: string, value: string) => Promise<boolean>
       dbGetSetting: (key: string) => Promise<string | null>
+      getAppVersion: () => Promise<string>
       
       // 文件扫描
+
       scanHtmlFiles: (rootPath: string, recursive?: boolean) => Promise<Array<{
         name: string
         path: string

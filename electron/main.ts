@@ -489,6 +489,11 @@ ipcMain.handle('db-get-setting', async (_event, key: string) => {
   return getSetting(key)
 })
 
+ipcMain.handle('get-app-version', async () => {
+  return app.getVersion()
+})
+
+
 // 递归扫描目录下所有HTML文件
 ipcMain.handle('scan-html-files', async (_event, rootPath: string, recursive: boolean = true) => {
   const htmlFiles: Array<{

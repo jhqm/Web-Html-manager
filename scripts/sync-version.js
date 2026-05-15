@@ -2,18 +2,29 @@ const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 
+const BASE_VERSION = '1.0.0'
+
 function run(command) {
+
   return execSync(command, { encoding: 'utf8' }).trim()
 }
 
 function getVersion() {
+  let headSha = 'nogit'
+  let dirty = false
+
+  try {
+    headSha = run('git rev-parse --short HEAD')
+    dirty = run('git status --porcelain').length > 0
+  } catch {
+    return `${BASE_VERSION}-dev.nogit`
+  }
+
   try {
     const tag = run('git describe --tags --abbrev=0')
     const normalizedTag = tag.replace(/^v/, '')
-    const headSha = run('git rev-parse --short HEAD')
     const tagCommit = run(`git rev-list -n 1 ${tag}`)
     const headCommit = run('git rev-parse HEAD')
-    const dirty = run('git status --porcelain').length > 0
 
     if (tagCommit === headCommit && !dirty) {
       return normalizedTag
@@ -21,10 +32,10 @@ function getVersion() {
 
     return `${normalizedTag}-dev.${headSha}${dirty ? '.dirty' : ''}`
   } catch {
-    const headSha = run('git rev-parse --short HEAD')
-    return `0.0.0-dev.${headSha}`
+    return `${BASE_VERSION}-dev.${headSha}${dirty ? '.dirty' : ''}`
   }
 }
+
 
 function updatePackageVersion(nextVersion) {
   const pkgPath = path.join(__dirname, '..', 'package.json')

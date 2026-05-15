@@ -401,10 +401,13 @@ const autoScanEnabled = ref(false)
 const autoScanIntervalMinutes = ref(30)
 let autoScanTimer: number | null = null
 const autoScanSettingsLoaded = ref(false)
+const appVersion = ref('读取中...')
 
 // 构建指纹：每次代码改动后我会手动更新这个字符串。
+
 // 如果 dev 环境上看到的 buildTag 与对话里说的一致，说明改动已同步。
-const buildTag = 'BUILD-110A'
+const buildTag = 'BUILD-110B'
+
 
 // 预览缩放（持久化在 localStorage，跨文件保留）
 const previewZoom = ref<number>(parseFloat(localStorage.getItem('previewZoom') || '1') || 1)
@@ -584,7 +587,17 @@ async function persistAutoScanSettings() {
   }
 }
 
+async function loadAppVersion() {
+  try {
+    appVersion.value = await window.electronAPI.getAppVersion()
+  } catch (error) {
+    console.error('[Settings] Failed to load app version:', error)
+    appVersion.value = 'unknown'
+  }
+}
+
 function formatDate(dateStr: string): string {
+
   const date = new Date(dateStr)
   return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
@@ -1044,8 +1057,10 @@ onMounted(async () => {
   await fileStore.init()
   await tagStore.init()
   await loadAutoScanSettings()
+  await loadAppVersion()
   setupAutoScanTimer()
 })
+
 </script>
 
 <style scoped>
