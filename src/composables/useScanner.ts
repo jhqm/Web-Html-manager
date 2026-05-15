@@ -38,7 +38,24 @@ export function useScanner() {
     return Number.isFinite(timestamp) ? timestamp : 0
   }
 
+  function toBaseName(filename: string | undefined): string {
+    if (!filename) return ''
+    const dot = filename.lastIndexOf('.')
+    return dot > 0 ? filename.slice(0, dot) : filename
+  }
+
+  function resolveTitleOnRename(oldName: string | undefined, oldTitle: string | undefined, newName: string): string | undefined {
+    const oldBase = toBaseName(oldName)
+    const newBase = toBaseName(newName)
+    // 仅当 title 为空或等于旧文件基名时自动跟随，避免覆盖用户主动编辑过的标题
+    if (!oldTitle || oldTitle === oldBase) {
+      return newBase
+    }
+    return undefined
+  }
+
   // 对账：优先保证数据库与磁盘真实状态一致
+
   // - 同路径但信息不同：修正 name/size/updated_at
   // - DB 丢路径 + 磁盘新路径：按 size + mtime 近似匹配为"外部重命名"
   async function reconcileFiles(repoPath: string, scannedFiles: ScanResult[]): Promise<ReconcileResult> {
@@ -60,13 +77,16 @@ export function useScanner() {
         parseTime(existing.updated_at) !== parseTime(scanned.updatedAt)
 
       if (shouldRefresh) {
+        const nextTitle = resolveTitleOnRename(existing.name, existing.title, scanned.name)
         await window.electronAPI.dbUpdateFile(existing.id, {
           name: scanned.name,
           size: scanned.size,
-          updated_at: scanned.updatedAt
+          updated_at: scanned.updatedAt,
+          ...(nextTitle !== undefined ? { title: nextTitle } : {})
         })
         refreshed++
       }
+
     }
 
     // 2) 外部重命名修复：旧 path 消失 + 新 path 出现，尽量保持同一条 DB 记录
@@ -87,12 +107,15 @@ export function useScanner() {
 
       if (!match) continue
 
+      const nextTitle = resolveTitleOnRename(dbFile.name, dbFile.title, match.name)
       await window.electronAPI.dbUpdateFile(dbFile.id, {
         name: match.name,
         path: match.path,
         size: match.size,
-        updated_at: match.updatedAt
+        updated_at: match.updatedAt,
+        ...(nextTitle !== undefined ? { title: nextTitle } : {})
       })
+
       usedScannedPath.add(match.path)
       renamed++
     }

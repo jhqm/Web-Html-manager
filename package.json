@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "sync:version": "node scripts/sync-version.js",
     "electron:dev": "vite --config vite.config.ts",
-    "electron:build": "vite build && electron-builder",
-    "package": "vite build && electron-builder --dir"
+    "electron:build": "npm run sync:version && vite build && electron-builder",
+    "package": "npm run sync:version && vite build && electron-builder --dir"
   },
   "keywords": [
     "html",

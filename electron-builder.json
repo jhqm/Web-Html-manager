@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.aihtml.manager",
   "productName": "AI HTML Manager",
-  "artifactName": "html-manager-${version}-${arch}.${ext}",
+  "artifactName": "html-manager-${version}-${os}-${arch}.${ext}",
   "directories": {
     "output": "release"
   },
