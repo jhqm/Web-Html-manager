@@ -117,6 +117,26 @@ function createTables(): void {
     )
   `)
 
+  // 数据修正：早期 Windows 版本曾把完整路径写入 name 字段，统一修正为纯文件名
+  try {
+    const dirty = db.prepare(
+      `SELECT id, path FROM files WHERE name LIKE '%/%' OR name LIKE '%\\%'`
+    ).all() as Array<{ id: number; path: string }>
+    if (dirty.length > 0) {
+      const fix = db.prepare('UPDATE files SET name = ? WHERE id = ?')
+      const tx = db.transaction((rows: Array<{ id: number; path: string }>) => {
+        for (const r of rows) {
+          const base = (r.path || '').split(/[/\\]/).pop() || ''
+          if (base) fix.run(base, r.id)
+        }
+      })
+      tx(dirty)
+      console.log(`[Database] Repaired ${dirty.length} files.name records`)
+    }
+  } catch (e) {
+    console.warn('[Database] name repair skipped:', e)
+  }
+
   console.log('[Database] Tables created')
 }
 
@@ -238,33 +258,28 @@ export function getAllFiles(): FileRecord[] {
  * - 原仓库的记录（含标签关联、版本、置顶等）保留在库中，切换回原仓库后可恢复显示；
  * - 通过 SQL 前缀过滤一次性命中，避免在渲染进程做大集合差集，减少抖动与卡顿。
  *
- * 前缀匹配规则：
- * - 完全等于 repoPath（理论上仓库本身不可能是 .html，但兜底保留）
- * - 以 repoPath + 路径分隔符开头（例如 "/repoA/" / "/repoA\\"），
- *   防止 "/repo" 错误命中 "/repository/x.html"。
- *
- * 安全转义：
- * - LIKE 中的 %、_、\ 需要转义；这里使用 ESCAPE '\' 显式声明转义符。
+ * 跨平台路径规范化：
+ * - Windows 上 path.join 返回反斜杠分隔的路径（如 C:\foo\bar），
+ *   但 LIKE 中反斜杠是转义符，会导致匹配失败；
+ * - 因此先将 repoPath 和数据库中的路径统一替换为正斜杠再做比较，
+ *   避免反斜杠转义问题，同时兼容 macOS/Windows。
  */
 export function getFilesByRepoPath(repoPath: string): FileRecord[] {
   const database = getDatabase()
   if (!repoPath) return []
 
-  const normalized = repoPath.replace(/[\\/]+$/, '')
-  // 转义 LIKE 通配符（顺序：先转义 \，再 % 与 _）
-  const escapeLike = (s: string) => s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
-  const escaped = escapeLike(normalized)
-  const likePosix = `${escaped}/%`
-  const likeWin = `${escaped}\\%`
+  // 规范化：去除末尾分隔符，统一为正斜杠
+  const normalized = repoPath.replace(/[\\/]+$/, '').replace(/\\/g, '/')
+  const escaped = normalized.replace(/%/g, '\\%').replace(/_/g, '\\_')
+  const likePattern = `${escaped}/%`
 
   const stmt = database.prepare(
     `SELECT * FROM files
-     WHERE path = ?
-        OR path LIKE ? ESCAPE '\\'
-        OR path LIKE ? ESCAPE '\\'
+     WHERE REPLACE(path, '\\', '/') = ?
+        OR REPLACE(path, '\\', '/') LIKE ? ESCAPE '\\'
      ORDER BY updated_at DESC`
   )
-  return stmt.all(normalized, likePosix, likeWin) as FileRecord[]
+  return stmt.all(normalized, likePattern) as FileRecord[]
 }
 
 export function getFilesByFolder(folderId: number | null): FileRecord[] {

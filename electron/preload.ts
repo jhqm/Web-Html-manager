@@ -85,7 +85,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('scan-html-files', rootPath, recursive),
   copyFileToRepo: (sourcePath: string, destDir: string) => 
     ipcRenderer.invoke('copy-file-to-repo', sourcePath, destDir),
-  selectHtmlFiles: () => ipcRenderer.invoke('select-html-files')
+  selectHtmlFiles: () => ipcRenderer.invoke('select-html-files'),
+  joinPath: (...segments: string[]) => ipcRenderer.invoke('join-path', ...segments)
 })
 
 // 类型声明
@@ -251,6 +252,7 @@ declare global {
       }>>
       copyFileToRepo: (sourcePath: string, destDir: string) => Promise<{ success: boolean; path?: string; error?: string }>
       selectHtmlFiles: () => Promise<string[]>
+      joinPath: (...segments: string[]) => Promise<string>
     }
   }
 }

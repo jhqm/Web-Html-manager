@@ -217,7 +217,7 @@ export const useFileStore = defineStore('file', () => {
     const file = files.value.find(f => f.id === id)
     if (!file) return { success: false, error: '文件不存在' }
 
-    const versionsDir = repoPath.value ? `${repoPath.value}/.versions` : undefined
+    const versionsDir = repoPath.value ? await window.electronAPI.joinPath(repoPath.value, '.versions') : undefined
 
     try {
       // 1) 磁盘上重命名（含同名快照迁移）

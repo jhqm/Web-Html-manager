@@ -665,7 +665,7 @@ async function selectFile(file: typeof fileStore.currentFile) {
 
 async function createSnapshot() {
   if (!fileStore.currentFile || !fileStore.repoPath) return
-  const versionsDir = fileStore.repoPath + '/.versions'
+  const versionsDir = await window.electronAPI.joinPath(fileStore.repoPath, '.versions')
   const result = await window.electronAPI.createSnapshot(fileStore.currentFile.path, versionsDir)
   if (result.success && fileStore.currentFile.id) {
     await versionStore.createVersion(fileStore.currentFile.id, result.snapshotPath!)
@@ -797,14 +797,14 @@ async function handleFileCommand(command: string, file: any) {
       showTagDialog.value = true
       break
     case 'rename': {
-      // 解析原文件名 → base + ext，只让用户编辑 base
-      const fullName: string = file.name || ''
-      const dotIdx = fullName.lastIndexOf('.')
+      // 始终以 file.path 为准提取真实文件名（兼容历史脏数据：早期版本可能把完整路径写进 name 字段）
+      const realName = (file.path || '').split(/[/\\]/).pop() || file.name || ''
+      const dotIdx = realName.lastIndexOf('.')
       if (dotIdx > 0) {
-        renameBaseName.value = fullName.slice(0, dotIdx)
-        renameExt.value = fullName.slice(dotIdx)
+        renameBaseName.value = realName.slice(0, dotIdx)
+        renameExt.value = realName.slice(dotIdx)
       } else {
-        renameBaseName.value = fullName
+        renameBaseName.value = realName
         renameExt.value = '.html'
       }
       showRenameDialog.value = true

@@ -11,6 +11,11 @@ export interface ScanResult {
   updatedAt: string
 }
 
+interface ReconcileResult {
+  renamed: number
+  refreshed: number
+}
+
 export function useScanner() {
   const fileStore = useFileStore()
   const scanning = ref(false)
@@ -27,6 +32,74 @@ export function useScanner() {
     }
   }
 
+  function parseTime(value: string | undefined): number {
+    if (!value) return 0
+    const timestamp = new Date(value).getTime()
+    return Number.isFinite(timestamp) ? timestamp : 0
+  }
+
+  // 对账：优先保证数据库与磁盘真实状态一致
+  // - 同路径但信息不同：修正 name/size/updated_at
+  // - DB 丢路径 + 磁盘新路径：按 size + mtime 近似匹配为"外部重命名"
+  async function reconcileFiles(repoPath: string, scannedFiles: ScanResult[]): Promise<ReconcileResult> {
+    const dbFiles = await window.electronAPI.dbGetFilesByRepoPath(repoPath)
+    const dbByPath = new Map(dbFiles.map(file => [file.path, file]))
+    const scannedByPath = new Map(scannedFiles.map(file => [file.path, file]))
+
+    let refreshed = 0
+    let renamed = 0
+
+    // 1) 同路径刷新：修正显示名与元信息
+    for (const scanned of scannedFiles) {
+      const existing = dbByPath.get(scanned.path)
+      if (!existing) continue
+
+      const shouldRefresh =
+        existing.name !== scanned.name ||
+        existing.size !== scanned.size ||
+        parseTime(existing.updated_at) !== parseTime(scanned.updatedAt)
+
+      if (shouldRefresh) {
+        await window.electronAPI.dbUpdateFile(existing.id, {
+          name: scanned.name,
+          size: scanned.size,
+          updated_at: scanned.updatedAt
+        })
+        refreshed++
+      }
+    }
+
+    // 2) 外部重命名修复：旧 path 消失 + 新 path 出现，尽量保持同一条 DB 记录
+    const orphanDbFiles = dbFiles.filter(file => !scannedByPath.has(file.path))
+    const orphanScannedFiles = scannedFiles.filter(file => !dbByPath.has(file.path))
+    const usedScannedPath = new Set<string>()
+
+    for (const dbFile of orphanDbFiles) {
+      const dbTime = parseTime(dbFile.updated_at)
+
+      const match = orphanScannedFiles.find(scanned => {
+        if (usedScannedPath.has(scanned.path)) return false
+        if (scanned.size !== dbFile.size) return false
+
+        const scannedTime = parseTime(scanned.updatedAt)
+        return Math.abs(scannedTime - dbTime) <= 2000
+      })
+
+      if (!match) continue
+
+      await window.electronAPI.dbUpdateFile(dbFile.id, {
+        name: match.name,
+        path: match.path,
+        size: match.size,
+        updated_at: match.updatedAt
+      })
+      usedScannedPath.add(match.path)
+      renamed++
+    }
+
+    return { renamed, refreshed }
+  }
+
   // 导入扫描到的文件到数据库
   async function importFiles(files: ScanResult[]): Promise<{ imported: number; skipped: number }> {
     let imported = 0
@@ -36,10 +109,11 @@ export function useScanner() {
       try {
         // 检查文件是否已存在于数据库
         const existing = await window.electronAPI.dbGetFileByPath(file.path)
-        
+
         if (existing) {
           // 更新已有记录
           await window.electronAPI.dbUpdateFile(existing.id, {
+            name: file.name,
             size: file.size,
             updated_at: file.updatedAt
           })
@@ -47,7 +121,7 @@ export function useScanner() {
         } else {
           // 读取文件元数据
           const meta = await window.electronAPI.readFile(file.path)
-          
+
           // 添加新记录
           await window.electronAPI.dbInsertFile({
             name: file.name,
@@ -71,6 +145,7 @@ export function useScanner() {
 
   // 自动扫描仓库目录
   async function autoScan(silent: boolean = false): Promise<{ imported: number; skipped: number }> {
+
     if (!fileStore.repoPath) {
       if (!silent) ElMessage.warning('请先选择仓库目录')
       return { imported: 0, skipped: 0 }
@@ -89,6 +164,9 @@ export function useScanner() {
         return { imported: 0, skipped: 0 }
       }
 
+      // 先对账，避免外部重命名导致"旧记录孤立 + 新记录插入"
+      const reconcileResult = await reconcileFiles(fileStore.repoPath, files)
+
       // 导入文件
       const result = await importFiles(files)
 
@@ -98,10 +176,13 @@ export function useScanner() {
       if (!silent) {
         if (result.imported > 0) {
           ElMessage.success(`导入完成：新增 ${result.imported} 个文件`)
+        } else if (reconcileResult.renamed > 0 || reconcileResult.refreshed > 0) {
+          ElMessage.success(`已同步 ${reconcileResult.renamed} 个重命名，刷新 ${reconcileResult.refreshed} 条记录`)
         } else {
           ElMessage.info('所有文件已是最新')
         }
       }
+
 
       return result
     } catch (error) {
@@ -144,7 +225,7 @@ export function useScanner() {
           
           // 添加到数据库
           await fileStore.addFile({
-            name: result.path.split('/').pop() || '',
+            name: result.path.split(/[/\\]/).pop() || '',
             path: result.path,
             title: meta.title,
             description: meta.description

@@ -562,6 +562,11 @@ ipcMain.handle('select-html-files', async () => {
   return result.canceled ? [] : result.filePaths
 })
 
+// IPC: 跨平台路径拼接
+ipcMain.handle('join-path', async (_event, ...segments: string[]) => {
+  return path.join(...segments)
+})
+
 app.whenReady().then(async () => {
   // 初始化数据库
   initDatabase()
